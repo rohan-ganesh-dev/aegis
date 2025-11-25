@@ -1,0 +1,186 @@
+openapi: 3.0.0
+info:
+  title: Aegis HIL API
+  description: Human-in-Loop approval API for Aegis agents
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8001
+    description: Local development server
+
+paths:
+  /:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is operational
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                  status:
+                    type: string
+                  version:
+                    type: string
+
+  /api/hil/approvals:
+    post:
+      summary: Create approval request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequest'
+      responses:
+        '200':
+          description: Approval request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalData'
+
+    get:
+      summary: List approval requests
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: List of approval requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalData'
+
+  /api/hil/approvals/{request_id}:
+    get:
+      summary: Get approval request by ID
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Approval request details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalData'
+        '404':
+          description: Approval request not found
+
+  /api/hil/approvals/{request_id}/approve:
+    post:
+      summary: Approve an action request
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: notes
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Request approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalData'
+        '404':
+          description: Approval request not found
+
+  /api/hil/approvals/{request_id}/reject:
+    post:
+      summary: Reject an action request
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: notes
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Request rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalData'
+        '404':
+          description: Approval request not found
+
+components:
+  schemas:
+    ApprovalRequest:
+      type: object
+      required:
+        - agent_id
+        - customer_id
+        - action_type
+        - details
+      properties:
+        agent_id:
+          type: string
+          description: ID of the requesting agent
+        customer_id:
+          type: string
+          description: Customer identifier
+        action_type:
+          type: string
+          description: Type of action requiring approval
+        details:
+          type: object
+          description: Action-specific details
+
+    ApprovalData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique approval request ID
+        timestamp:
+          type: string
+          format: date-time
+          description: Request creation timestamp
+        agent_id:
+          type: string
+        customer_id:
+          type: string
+        action_type:
+          type: string
+        details:
+          type: object
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        approved_at:
+          type: string
+          format: date-time
+        rejected_at:
+          type: string
+          format: date-time
+        notes:
+          type: string

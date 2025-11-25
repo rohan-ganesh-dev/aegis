@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Supervisor service - main orchestration agent
+  supervisor:
+    build: .
+    container_name: aegis-supervisor
+    environment:
+      - LOG_LEVEL=INFO
+      - TRANSPORT_TYPE=in_memory
+    volumes:
+      - ./aegis:/app/aegis
+    networks:
+      - aegis-network
+    restart: unless-stopped
+
+  # HIL Dashboard - Streamlit UI for approvals
+  hil-dashboard:
+    build: .
+    container_name: aegis-hil-dashboard
+    command: streamlit run aegis/hil/dashboard.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./aegis:/app/aegis
+    networks:
+      - aegis-network
+    restart: unless-stopped
+
+  # HIL API - FastAPI endpoints for approvals
+  hil-api:
+    build: .
+    container_name: aegis-hil-api
+    command: python aegis/hil/api.py
+    ports:
+      - "8001:8001"
+    environment:
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./aegis:/app/aegis
+    networks:
+      - aegis-network
+    restart: unless-stopped
+
+  # Vector DB Mock - placeholder for vector database
+  # TODO: Replace with real vector DB (Qdrant, Pinecone, etc.)
+  vector-db-mock:
+    image: nginx:alpine
+    container_name: aegis-vector-db-mock
+    ports:
+      - "6333:80"
+    networks:
+      - aegis-network
+    restart: unless-stopped
+
+networks:
+  aegis-network:
+    driver: bridge
+
+volumes:
+  aegis-data:

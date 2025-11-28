@@ -12,7 +12,6 @@ from typing import Optional
 
 from aegis.agents.base import AgentMessage, AgentResponse, BaseAgent
 from aegis.tools.sandbox_api_tool import SandboxAPITool
-from aegis.tools.vector_db_client import VectorDBClient
 
 logger = logging.getLogger(__name__)
 

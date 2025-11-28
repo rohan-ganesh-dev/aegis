@@ -22,7 +22,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from aegis.agents.base import AgentMessage, AgentResponse
-from aegis.agents.jira_chargebee_agent import JiraChargebeeAgent
+from aegis.agents.orchestrator_agent import OrchestratorAgent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,14 +46,15 @@ def _extract_issue_key(issue_key: Optional[str], query: str) -> str:
 
 
 async def _run_jira_agent_async(
-    issue_key: str,
-    query: str,
-    dry_run: bool,
-) -> AgentMessage:
+    issue_key: Optional[str], query: str, dry_run: bool
+) -> AgentResponse:
     """
-    Spin up the JiraChargebeeAgent, run a single request, and shut it down.
+    Run the orchestrator agent asynchronously.
+    Orchestrator will route to appropriate specialized agent.
+
+    Returns Response object from agent.
     """
-    agent = JiraChargebeeAgent(agent_id="jira_chargebee_dashboard")
+    agent = OrchestratorAgent(agent_id="orchestrator_dashboard")
     await agent.start()
 
     payload = {
@@ -63,7 +64,7 @@ async def _run_jira_agent_async(
     }
     message = AgentMessage(
         sender="hil_dashboard",
-        recipient="jira_chargebee_dashboard",
+        recipient="orchestrator_dashboard",
         type="task",
         payload=payload,
     )
@@ -93,13 +94,17 @@ async def _run_feedback_async(
     issue_key: Optional[str] = None,
 ) -> AgentResponse:
     """
-    Process user feedback through the agent.
+    Process user feedback through the orchestrator.
+    The orchestrator will remember which agent handled the original query.
     """
-    agent = JiraChargebeeAgent(agent_id="jira_chargebee_dashboard")
+    # For feedback, we use the orchestrator which will delegate to the appropriate agent
+    agent = OrchestratorAgent(agent_id="orchestrator_dashboard")
     await agent.start()
     
     try:
-        response = await agent.handle_feedback(
+        # The orchestrator's specialized agents have the feedback handler
+        # We'll call it through the query agent for now (both have same feedback logic)
+        response = await agent.query_agent.handle_feedback(
             query=query,
             docs_answer=docs_answer,
             feedback_type=feedback_type,
@@ -418,6 +423,20 @@ elif page == "Jira Chargebee Agent":
                 
                 # Display assistant response in chat message container
                 with st.chat_message("assistant"):
+                    # Display routing information if available
+                    if response.metadata and "orchestrator" in response.metadata:
+                        orch_info = response.metadata["orchestrator"]
+                        routed_to = orch_info.get("routed_to", "Unknown")
+                        
+                        # Display agent badge
+                        badge_color = "#4CAF50" if "Onboarding" in routed_to else "#2196F3"
+                        st.markdown(
+                            f'<span style="background-color: {badge_color}; color: white; padding: 2px 8px; '
+                            f'border-radius: 12px; font-size: 12px; font-weight: bold;">'
+                            f'🤖 {routed_to}</span>',
+                            unsafe_allow_html=True
+                        )
+                    
                     st.markdown(agent_response_text)
                     
                     # Show attachments if any

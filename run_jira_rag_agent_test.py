@@ -20,9 +20,9 @@ async def test_connection():
             "run",
             "--rm",
             "-i",
-            "-e", "JIRA_URL=",
-            "-e", "JIRA_USERNAME=",
-            "-e", "JIRA_API_TOKEN=",
+            "-e", "JIRA_URL=https://jobsforrohanganesh.atlassian.net",
+            "-e", "JIRA_USERNAME=jobsfor.rohanganesh@gmail.com",
+            "-e", "JIRA_API_TOKEN=ATATT3xFfGF0fNEt3WXn7bmsj3gLuazA4kkVlyhqZ39f_Z5NiAlkXjhT-wHpht1GbJT6ckJE261YxUiPIh-ixxYgJvvnnkGhWmKe6u9KVYDnfCTz_6OOeVO4RIcBWpqvr2fy10lOWdCUH3EId37SPrNa7OmFx5Y0IO_oSd2QktMcfDof_QdDqEQ=1EE1E636",
             "ghcr.io/sooperset/mcp-atlassian:latest",
         ],
     )

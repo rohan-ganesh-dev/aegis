@@ -23,8 +23,8 @@ except ImportError:
 
 import httpx
 
-DEFAULT_SERVER_URL = ""
-DEFAULT_TOOL_NAME = ""
+DEFAULT_SERVER_URL = "https://scalableai-test.mcp.chargebee.com/knowledge_base_agent"
+DEFAULT_TOOL_NAME = "query_knowledge_base"
 
 
 class ChargebeeMCPError(RuntimeError):

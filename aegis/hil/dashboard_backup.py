@@ -85,7 +85,7 @@ async def _run_jira_agent_async(
         "query": query,
         "issue_key": issue_key,
         "dry_run": dry_run,
-        "customer_id": customer_id,  # Pass customer_id to agent
+        "customer_id": customer_id,  # Will be passed from UI
     }
     
     # Create message for backward compatibility
@@ -245,186 +245,84 @@ if 'session_id' not in st.session_state:
     st.session_state.session_id = str(uuid4())
     logger.info(f"Created new session_id: {st.session_state.session_id}")
 
-# --- Sidebar Navigation ---
-st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Approvals Dashboard", "Jira Chargebee Agent"], index=1)
+# Initialize customer_id for demo
+if 'customer_id' not in st.session_state:
+    st.session_state.customer_id = "demo_new_customer"  # Default for demo
 
-if page == "Approvals Dashboard":
-    st.title("🛡️ Aegis Human-in-Loop Dashboard")
-    st.markdown("Review and approve high-value agent actions")
+# --- Main Page - Agentic Customer Success Agent ---
+st.header("🤖 Agentic Customer Success Agent")
+st.markdown("Experience truly agentic AI - not just answers, but autonomous actions.")
 
-    # Tabs for Approvals
-    tab1, tab2 = st.tabs(["Pending Approvals", "History"])
+# Sidebar: Customer Context Card
+st.sidebar.divider()
+st.sidebar.header("🎯 Customer Context")
 
-    with tab1:
-        st.header("Pending Approval Requests")
+# Customer selector for demo
+customer_options = {
+    "New Customer": "demo_new_customer",
+    "Trial Customer": "demo_trial_customer",
+    "Active Customer": "demo_active_customer",
+    "At-Risk Customer": "demo_at_risk_customer"
+}
+selected_customer_name = st.sidebar.selectbox(
+    "Select Demo Customer",
+    options=list(customer_options.keys()),
+    help="Switch between different customer scenarios"
+)
+st.session_state.customer_id = customer_options[selected_customer_name]
 
-        pending_requests = [
-            req
-            for req in st.session_state.approval_requests
-            if req["status"] == "pending"
-        ]
+# Fetch and display customer profile
+try:
+    profile = asyncio.run(get_customer_profile(st.session_state.customer_id))
+    if profile.get("found"):
+        st.sidebar.markdown(f"**Company:** {profile.get('company', 'N/A')}")
+        st.sidebar.markdown(f"**Tier:** {profile.get('subscription_tier', 'none').upper()}")
+        st.sidebar.markdown(f"**Stage:** {profile.get('onboarding_stage', 'unknown')}")
+        st.sidebar.markdown(f"**API Calls:** {profile.get('total_api_calls', 0)}")
+        
+        # Health indicator
+        health = asyncio.run(get_customer_health(st.session_state.customer_id))
+        health_status = health.get("health_status", "unknown")
+        health_emoji = {"healthy": "✅", "needs_attention": "⚠️", "at_risk": "🚨", "new": "🆕"}
+        st.sidebar.markdown(f"**Health:** {health_emoji.get(health_status, '❓')} {health_status.title()}")
+except Exception as e:
+    st.sidebar.warning(f"Could not load profile: {str(e)}")
 
-        if not pending_requests:
-            st.info("No pending approval requests")
-        else:
-            for req in pending_requests:
-                with st.container():
-                    st.divider()
+st.sidebar.divider()
+st.sidebar.header("⚙️ Agent Settings")
+dry_run = st.sidebar.checkbox("Dry Run Mode", value=True, key="chat_dry_run", help="If checked, won't post to Jira")
 
-                    col1, col2 = st.columns([3, 1])
+# Proactive Interventions Section
+st.sidebar.divider()
+st.sidebar.header("🔔 Proactive Interventions")
+try:
+    monitor = get_monitor()
+    interventions = monitor.get_recent_interventions(limit=3)
+    if interventions:
+        for intervention in interventions:
+            with st.sidebar.expander(f"{intervention['type'].replace('_', ' ').title()}", expanded=False):
+                st.markdown(f"**Customer:** {intervention['customer_name']}")
+                st.markdown(f"**Reason:** {intervention['reason']}")
+                st.markdown(f"**Priority:** {intervention['priority'].upper()}")
+                st.caption(intervention['message'][:100] + "...")
+    else:
+        st.sidebar.info("No recent interventions")
+except Exception as e:
+    st.sidebar.caption(f"Monitor not active")
 
-                    with col1:
-                        st.subheader(f"Request ID: {req['id']}")
-                        st.write(f"**Agent:** {req['agent']}")
-                        st.write(f"**Customer:** {req['customer_id']}")
-                        st.write(f"**Action:** {req['action_type']}")
-                        st.write(f"**Timestamp:** {req['timestamp']}")
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+    # Add welcome message
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": "Hello! I can help you with Chargebee documentation or Jira tickets. Ask me a question or mention a ticket key (e.g., KAN-7)."
+    })
 
-                        st.write("**Details:**")
-                        for key, value in req["details"].items():
-                            st.write(f"- {key}: {value}")
+# Initialize feedback tracking
+if "feedback_given" not in st.session_state:
+    st.session_state.feedback_given = {}
 
-                    with col2:
-                        st.write("**Actions**")
-
-                        if st.button("✅ Approve", key=f"approve_{req['id']}"):
-                            approve_request(req["id"])
-                            st.rerun()
-
-                        if st.button("❌ Reject", key=f"reject_{req['id']}"):
-                            reject_request(req["id"])
-                            st.rerun()
-
-    with tab2:
-        st.header("Approval History")
-
-        completed_requests = [
-            req
-            for req in st.session_state.approval_requests
-            if req["status"] != "pending"
-        ]
-
-        if not completed_requests:
-            st.info("No approval history")
-        else:
-            for req in completed_requests:
-                status_emoji = "✅" if req["status"] == "approved" else "❌"
-                with st.expander(f"{status_emoji} {req['id']} - {req['status'].upper()}"):
-                    st.write(f"**Agent:** {req['agent']}")
-                    st.write(f"**Customer:** {req['customer_id']}")
-                    st.write(f"**Action:** {req['action_type']}")
-                    st.write(f"**Status:** {req['status']}")
-                    st.json(req["details"])
-    
-    # Footer for Dashboard
-    st.divider()
-    st.caption(
-        "⚠️ BOILERPLATE: This is a mock dashboard. "
-        "Production should integrate with persistent storage and agent callback system."
-    )
-
-elif page == "Jira Chargebee Agent":
-    st.header("🤖 Agentic Customer Success Agent")
-    st.markdown("Experience truly agentic AI - not just answers, but autonomous actions.")
-    
-    # Initialize customer_id for demo  
-    if 'customer_id' not in st.session_state:
-        st.session_state.customer_id = "demo_new_customer"
-    
-    # Sidebar: Customer Context Card
-    st.sidebar.divider()
-    st.sidebar.header("🎯 Customer Context")
-    
-    # Customer selector for demo
-    customer_options = {
-        "New Customer": "demo_new_customer",
-        "Trial Customer": "demo_trial_customer",
-        "Active Customer": "demo_active_customer",
-        "At-Risk Customer": "demo_at_risk_customer"
-    }
-    selected_customer_name = st.sidebar.selectbox(
-        "Select Demo Customer",
-        options=list(customer_options.keys()),
-        help="Switch between different customer scenarios"
-    )
-    st.session_state.customer_id = customer_options[selected_customer_name]
-    
-    # Fetch and display customer profile
-    try:
-        profile = asyncio.run(get_customer_profile(st.session_state.customer_id))
-        if profile.get("found"):
-            st.sidebar.markdown(f"**Company:** {profile.get('company', 'N/A')}")
-            st.sidebar.markdown(f"**Tier:** {profile.get('subscription_tier', 'none').upper()}")
-            st.sidebar.markdown(f"**Stage:** {profile.get('onboarding_stage', 'unknown')}")
-            st.sidebar.markdown(f"**API Calls:** {profile.get('total_api_calls', 0)}")
-            
-            # Health indicator
-            health = asyncio.run(get_customer_health(st.session_state.customer_id))
-            health_status = health.get("health_status", "unknown")
-            health_emoji = {"healthy": "✅", "needs_attention": "⚠️", "at_risk": "🚨", "new": "🆕"}
-            st.sidebar.markdown(f"**Health:** {health_emoji.get(health_status, '❓')} {health_status.title()}")
-    except Exception as e:
-        st.sidebar.warning(f"Could not load profile: {str(e)}")
-    
-    # Agent Settings
-    st.sidebar.divider()
-    st.sidebar.header("⚙️ Agent Settings")
-    dry_run = st.sidebar.checkbox("Dry Run Mode", value=True, key="chat_dry_run", help="If checked, won't post to Jira")
-    
-    # Proactive Interventions Section
-    st.sidebar.divider()
-    st.sidebar.header("🔔 Proactive Interventions")
-    
-    # Button to trigger monitor check
-    if st.sidebar.button("🔄 Run Monitor Check", help="Manually trigger proactive health monitoring"):
-        with st.spinner("Analyzing customer health..."):
-            try:
-                monitor = get_monitor()
-                # Run the check synchronously
-                asyncio.run(monitor._check_all_customers())
-                st.sidebar.success("✅ Monitor check complete!")
-                st.rerun()  # Refresh to show new interventions
-            except Exception as e:
-                st.sidebar.error(f"Error running monitor: {str(e)}")
-    
-    # Display interventions
-    try:
-        monitor = get_monitor()
-        interventions = monitor.get_recent_interventions(limit=3)
-        if interventions:
-            for intervention in interventions:
-                with st.sidebar.expander(f"{intervention['type'].replace('_', ' ').title()}", expanded=False):
-                    st.markdown(f"**Customer:** {intervention['customer_name']}")
-                    st.markdown(f"**Reason:** {intervention['reason']}")
-                    st.markdown(f"**Priority:** {intervention['priority'].upper()}")
-                    st.caption(intervention['message'][:100] + "...")
-        else:
-            st.sidebar.info("No recent interventions. Click 'Run Monitor Check' above.")
-    except Exception as e:
-        st.sidebar.caption(f"Monitor error: {str(e)}")
-    
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-        # Add welcome message
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": "Hello! I can help you with Chargebee documentation or Jira tickets. Ask me a question or mention a ticket key (e.g., KAN-7)."
-        })
-    
-    # Initialize feedback tracking
-    if "feedback_given" not in st.session_state:
-        st.session_state.feedback_given = {}
-
-    # Display chat messages from history on app rerun
-    for idx, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"]):
-            # Display agent name badge for assistant messages
-            if message["role"] == "assistant" and "agent_name" in message:
-                agent_name = message["agent_name"]
-                badge_color = "#4CAF50" if "onboarding" in agent_name.lower() else "#2196F3"
-                st.markdown(
                     f'<span style="background-color: {badge_color}; color: white; padding: 2px 8px; '
                     f'border-radius: 12px; font-size: 12px; font-weight: bold;">'
                     f'🤖 {agent_name}</span>',

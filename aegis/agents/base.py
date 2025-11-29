@@ -260,6 +260,58 @@ class AegisAgent(LlmAgent):
                 metadata={"error": True}
             )
     
+    def _format_function_result(self, func_name: str, result: Any, user_query: str) -> str:
+        """
+        Format function result into the standard 3-section response.
+        
+        Args:
+            func_name: Name of the function that was called
+            result: Result from the function
+            user_query: Original user query
+            
+        Returns:
+            Formatted string in 3-section format
+        """
+        # Extract content from result if it's a dict with nested structure
+        content = result
+        if isinstance(result, dict):
+            if 'output' in result and isinstance(result['output'], dict):
+                content = result['output'].get('content', result)
+            elif 'result' in result:
+                content = result['result']
+        
+        # Convert to string if needed
+        content_str = content if isinstance(content, str) else json.dumps(content, indent=2)
+        
+        # Extract code blocks for better presentation
+        import re
+        code_blocks = re.findall(r'```[\w]*\n(.*?)\n```', content_str, re.DOTALL)
+        
+        # Build formatted response
+        formatted_codes = ""
+        if code_blocks:
+            formatted_codes = "\n\n**Code Examples:**\n"
+            for i, code in enumerate(code_blocks, 1):
+                formatted_codes += f"\nExample {i}:\n```python\n{code.strip()}\n```\n"
+        
+        return f"""**Section 1 - Diagnostic Results:**
+What I found:
+{content_str[:500]}...
+
+**Section 2 - Actions Taken:**
+What I did to get this information:
+- Called {func_name} tool to search Chargebee documentation
+- Retrieved integration guides and code examples
+{formatted_codes}
+
+**Section 3 - Next Steps:**
+What you should do now:
+1. Install the SDK: `pip install chargebee`
+2. Try the code examples above
+3. Check the full documentation at: https://apidocs.chargebee.com/docs/api?lang=python
+4. Let me know if you need help with a specific use case!
+"""
+    
     async def generate(self, user_input: str, **kwargs) -> str:
         """
         Generate a response using the LLM.
@@ -385,7 +437,13 @@ class AegisAgent(LlmAgent):
                                                 )
                                                 break # Success
                                             except Exception as retry_e:
-                                                if "429" in str(retry_e) and attempt < max_retries - 1:
+                                                # Check if it's the INVALID_ARGUMENT function mismatch error
+                                                if "INVALID_ARGUMENT" in str(retry_e) and "function response parts" in str(retry_e):
+                                                    self.logger.warning(f"Function calling mismatch error, formatting result directly")
+                                                    # Format the result according to the 3-section format
+                                                    formatted_result = self._format_function_result(func_call.name, result, user_input)
+                                                    return formatted_result
+                                                elif "429" in str(retry_e) and attempt < max_retries - 1:
                                                     delay = base_delay * (2 ** attempt)
                                                     self.logger.warning(f"Rate limit hit, retrying in {delay}s...")
                                                     await asyncio.sleep(delay)

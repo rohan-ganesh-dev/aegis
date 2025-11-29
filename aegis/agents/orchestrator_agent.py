@@ -98,15 +98,32 @@ class OrchestratorAgent(AegisAgent):
         Query: "{query}"
         
         Available Agents:
-        - onboarding: STRICTLY for new customer setup, account creation, API key generation, and migration planning.
-        - query_resolution: For platform usage, API questions, feature how-to guides, bug reports, and general documentation queries.
+        - onboarding: For new customer setup, account creation, API key generation, migration planning, 
+          AND error troubleshooting (401 errors, authentication issues, API failures). 
+          This agent has DIAGNOSTIC TOOLS to verify keys, test authentication, and fix issues.
+        - query_resolution: For platform usage documentation, feature how-to guides, 
+          conceptual questions, and general documentation queries (no actions, just info).
+        
+        FORCED ROUTING RULES (MUST OBEY):
+        - If query contains "401" OR "error" OR "failing" OR "authentication" OR "unauthorized" -> onboarding
+        - If query contains "get started" OR "setup" OR "new customer" -> onboarding
+        - If query about troubleshooting OR diagnosing problems -> onboarding
+        - Otherwise -> query_resolution
         
         Guidelines:
-        - "How do I create a customer?" -> query_resolution (Usage/API)
-        - "How do I set up my account?" -> onboarding (Setup)
-        - "My payment failed" -> query_resolution (Issue)
+        - "How do I create a customer?" -> query_resolution (Usage/API docs)
+        - "Help me get started" -> onboarding (Setup + Actions)
+        - "My API calls are failing with 401" -> onboarding (ERROR TROUBLESHOOTING)
+        - "I'm getting authentication errors" -> onboarding (ERROR TROUBLESHOOTING)
+        - "Why am I getting 401 errors?" -> onboarding (ERROR TROUBLESHOOTING)
+        - "API calls keep failing" -> onboarding (ERROR TROUBLESHOOTING)
+        - "My payment failed" -> query_resolution (General issue info)
         - "I need to migrate from Stripe" -> onboarding (Migration)
         - "Where do I find my API keys?" -> onboarding (Setup)
+        - "How does subscription billing work?" -> query_resolution (Conceptual)
+        
+        CRITICAL: ANY query about API errors, authentication failures, or troubleshooting -> onboarding
+        (The onboarding agent has diagnostic tools to actually FIX issues, not just explain them)
         
         Return ONLY the agent name (onboarding or query_resolution).
         """

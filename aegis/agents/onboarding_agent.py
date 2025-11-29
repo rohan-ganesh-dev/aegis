@@ -135,13 +135,32 @@ class OnboardingAgent(AegisAgent):
                 "  → Generate PERSONALIZED code snippets with their actual API keys\n"
                 "\n"
                 "IF customer reports errors (e.g., 401, API authentication):\n"
-                "  → Step 1: diagnose_401_error(customer_id) to identify root cause\n"
-                "  → Step 2: verify_api_key(customer_id) to check key validity\n"
-                "  → Step 3: test_api_authentication(customer_id) to test live connection\n"
-                "  → Step 4: apply_fix_for_401(customer_id) to autonomously fix common issues\n"
-                "  → Step 5: Provide SPECIFIC results: 'I ran diagnostics. Found: X. Fixed: Y. Try: Z'\n"
-                "  → If still unresolved after diagnostics, create_ticket() in Jira\n"
-                "  → NEVER give generic 'check your API key' advice - ALWAYS RUN DIAGNOSTICS FIRST\n"
+                "  CRITICAL INSTRUCTION: Call functions SEQUENTIALLY, ONE AT A TIME, NO TEXT until ALL complete!\n"
+                "  \n"
+                "  EXECUTE IN THIS EXACT ORDER:\n"
+                "  Turn 1: Call ONLY diagnose_401_error(customer_id) - DO NOT include any text with this call\n"
+                "  Turn 2: Call ONLY verify_api_key(customer_id) - DO NOT include any text with this call\n"
+                "  Turn 3: Call ONLY test_api_authentication(customer_id) - DO NOT include any text with this call\n"
+                "  Turn 4: Call ONLY apply_fix_for_401(customer_id) - DO NOT include any text with this call\n"
+                "  Turn 5: NOW provide comprehensive text response using results from ALL 4 function calls above\n"
+                "  \n"
+                "  Your final response MUST be structured as:\n"
+                "  \n"
+                "  **Diagnostic Results:**\n"
+                "  - Root Cause: [from diagnose_401_error result]\n"
+                "  - API Key Status: [from verify_api_key result - show actual key]\n"
+                "  - Authentication Test: [from test_api_authentication - show response_code, time]\n"
+                "  \n"
+                "  **Actions Taken:**\n"
+                "  - [List specific actions from apply_fix_for_401 result]\n"
+                "  - [Show code examples provided]\n"
+                "  \n"
+                "  **Next Steps:**\n"
+                "  1. [Specific instruction based on diagnosis]\n"
+                "  2. [Provide working code with their actual API key]\n"
+                "  3. [Offer continued support]\n"
+                "  \n"
+                "  ABSOLUTELY NO explanatory text until after ALL 4 functions have been called!\n"
                 "\n"
                 "🚀 PROACTIVE BEHAVIOR:\n"
                 "- If they've been onboarded >24h with no API calls, offer to help debug\n"
@@ -155,13 +174,35 @@ class OnboardingAgent(AegisAgent):
                 "4. When taking actions, explain what you're doing and why\n"
                 "5. After actions, update_customer_state() to track progress\n"
                 "\n"
-                "💬 COMMUNICATION STYLE:\n"
-                "- Be proactive: 'I've created your trial account' not 'You should create an account'\n"
-                "- Show what you did: 'Here's your API key: sk_test_xxx' not 'You Can get keys from dashboard'\n"
-                "- Be helpful: Provide working code, not just links to docs\n"
-                "- Be personal: Use their company name, reference their tech stack\n"
+                "💬 COMMUNICATION STYLE (CRITICAL):\n"
+                "- ALL responses MUST follow this EXACT 3-section format:\n"
                 "\n"
-                "Remember: You're not a chatbot. You're an autonomous agent that GETS THINGS DONE."
+                "**Section 1 - Diagnostic Results:**\n"
+                "What could be the issue (if troubleshooting)\n"
+                "OR What I found about your account (if onboarding)\n"
+                "- List specific findings with actual values\n"
+                "- Show API keys, subscription IDs, status\n"
+                "- Include diagnostic test results if ran\n"
+                "\n"
+                "**Section 2 - Actions Taken:**\n"
+                "What I did to help you\n"
+                "- Created subscription: SUB-123\n"
+                "- Generated API key: sk_test_xyz...\n"
+                "- Fixed authentication headers\n"
+                "- Show SPECIFIC IDs/keys/results from tool executions\n"
+                "\n"
+                "**Section 3 - Next Steps:**\n"
+                "What you should do now\n"
+                "1. Specific instruction with actual values\n"
+                "2. Working code example (if applicable)\n"
+                "3. Offer for continued support\n"
+                "\n"
+                "❌ BAD: 'I'll set up your account'\n"
+                "✅ GOOD: 'Actions Taken: Created trial subscription SUB-abc123, generated key sk_test_xyz...'\n"
+                "\n"
+                "NEVER skip any section. ALWAYS use this exact structure.\n"
+                "\n"
+                "Remember: You're not a chatbot. You're an autonomous agent that GETS THINGS DONE and SHOWS PROOF.\n"
             )
         )
         
@@ -173,13 +214,82 @@ class OnboardingAgent(AegisAgent):
         logger.info(f"[AGENTIC] OnboardingAgent processing: '{query}' for customer: {customer_id}")
         
         try:
-            # Enhance query with customer_id context
-            enhanced_query = (
-                f"Customer ID: {customer_id}\n"
-                f"Query: {query}\n\n"
-                f"IMPORTANT: Use get_customer_profile('{customer_id}') FIRST to understand their state, "
-                f"then decide what actions to take."
-            )
+            # Detect if this is an error troubleshooting query
+            error_keywords = ["401", "error", "fail", "authentication", "unauthorized", "not working"]
+            is_error_query = any(keyword in query.lower() for keyword in error_keywords)
+            
+            diagnostic_results = None
+            if is_error_query:
+                logger.info(f"[DIAGNOSTIC] Detected error query, running diagnostics for {customer_id}")
+                
+                # Manually execute all diagnostic tools
+                from aegis.tools.diagnostic_actions import (
+                    diagnose_401_error,
+                    verify_api_key,
+                    test_api_authentication,
+                    apply_fix_for_401
+                )
+                
+                # Run all diagnostics (now async)
+                diagnosis = await diagnose_401_error(customer_id)
+                verification = await verify_api_key(customer_id)
+                auth_test = await test_api_authentication(customer_id)
+                fix_result = await apply_fix_for_401(customer_id)
+                
+                diagnostic_results = {
+                    "diagnosis": diagnosis,
+                    "verification": verification,
+                    "auth_test": auth_test,
+                    "fix_result": fix_result
+                }
+                
+                logger.info(f"[DIAGNOSTIC] Diagnostics complete for {customer_id}")
+                
+                # Create enhanced query with diagnostic results
+                enhanced_query = f"""
+Customer ID: {customer_id}
+Query: {query}
+
+I have ALREADY RUN complete diagnostics. Here are the ACTUAL results:
+
+**Diagnosis Result:**
+{diagnosis}
+
+**API Key Verification:**
+{verification}
+
+**Authentication Test:**
+{auth_test}
+
+**Fixes Applied:**
+{fix_result}
+
+Please provide a comprehensive response to the customer using these ACTUAL diagnostic results. 
+Structure your response as:
+
+**Diagnostic Results:**
+- Root Cause: [extract from diagnosis above]
+- API Key Status: [extract from verification above]
+- Authentication Test: [extract from auth_test above]
+
+**Actions Taken:**
+- [extract from fix_result above]
+
+**Next Steps:**
+1. [Based on the results above, provide specific next steps]
+2. [Include code example if provided in fix_result]
+3. [Offer continued support]
+
+Be specific and reference the actual values from the diagnostic results above!
+"""
+            else:
+                # Standard query enhancement
+                enhanced_query = (
+                    f"Customer ID: {customer_id}\n"
+                    f"Query: {query}\n\n"
+                    f"IMPORTANT: Use get_customer_profile('{customer_id}') FIRST to understand their state, "
+                    f"then decide what actions to take."
+                )
             
             # Let the LLM agent handle the agentic workflow
             # It will analyze state, decide actions, and execute them using tools

@@ -11,7 +11,7 @@ from typing import Dict, Any
 logger = logging.getLogger(__name__)
 
 
-def verify_api_key(customer_id: str, api_key: str = None) -> Dict[str, Any]:
+async def verify_api_key(customer_id: str, api_key: str = None) -> Dict[str, Any]:
     """
     Verify if a customer's API key is valid and active.
     
@@ -33,7 +33,7 @@ def verify_api_key(customer_id: str, api_key: str = None) -> Dict[str, Any]:
     # Demo simulation
     from aegis.state.state_manager import get_state_manager
     state_manager = get_state_manager()
-    profile = state_manager.get_customer(customer_id)
+    profile = await state_manager.get_customer(customer_id)
     
     if not profile:
         return {
@@ -65,7 +65,7 @@ def verify_api_key(customer_id: str, api_key: str = None) -> Dict[str, Any]:
     }
 
 
-def test_api_authentication(customer_id: str, environment: str = "test") -> Dict[str, Any]:
+async def test_api_authentication(customer_id: str, environment: str = "test") -> Dict[str, Any]:
     """
     Make a test API call to verify authentication is working.
     
@@ -80,7 +80,7 @@ def test_api_authentication(customer_id: str, environment: str = "test") -> Dict
     
     from aegis.state.state_manager import get_state_manager
     state_manager = get_state_manager()
-    profile = state_manager.get_customer(customer_id)
+    profile = await state_manager.get_customer(customer_id)
     
     if not profile:
         return {
@@ -119,7 +119,7 @@ def test_api_authentication(customer_id: str, environment: str = "test") -> Dict
     }
 
 
-def diagnose_401_error(customer_id: str, error_details: Dict[str, Any] = None) -> Dict[str, Any]:
+async def diagnose_401_error(customer_id: str, error_details: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Diagnose the root cause of 401 authentication errors.
     
@@ -134,7 +134,7 @@ def diagnose_401_error(customer_id: str, error_details: Dict[str, Any] = None) -
     
     from aegis.state.state_manager import get_state_manager
     state_manager = get_state_manager()
-    profile = state_manager.get_customer(customer_id)
+    profile = await state_manager.get_customer(customer_id)
     
     if not profile:
         return {
@@ -209,7 +209,7 @@ def _get_diagnosis_explanation(root_cause: str) -> str:
     return explanations.get(root_cause, "Unknown error")
 
 
-def apply_fix_for_401(customer_id: str) -> Dict[str, Any]:
+async def apply_fix_for_401(customer_id: str) -> Dict[str, Any]:
     """
     Autonomously apply fixes for common 401 errors.
     
@@ -225,7 +225,7 @@ def apply_fix_for_401(customer_id: str) -> Dict[str, Any]:
     from aegis.tools.chargebee_actions import generate_api_keys
     
     state_manager = get_state_manager()
-    profile = state_manager.get_customer(customer_id)
+    profile = await state_manager.get_customer(customer_id)
     
     actions_taken = []
     

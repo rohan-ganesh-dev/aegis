@@ -23,6 +23,8 @@ if PROJECT_ROOT not in sys.path:
 
 from aegis.agents.base import AgentMessage, AgentResponse
 from aegis.agents.orchestrator_agent import OrchestratorAgent
+from aegis.config import config
+from aegis.services.session_service import get_or_create_session
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,22 +48,42 @@ def _extract_issue_key(issue_key: Optional[str], query: str) -> str:
 
 
 async def _run_jira_agent_async(
-    issue_key: Optional[str], query: str, dry_run: bool
+    issue_key: Optional[str], query: str, dry_run: bool, user_id: str, session_id: str
 ) -> AgentResponse:
     """
-    Run the orchestrator agent asynchronously.
+    Run the orchestrator agent asynchronously with session support.
     Orchestrator will route to appropriate specialized agent.
+
+    Args:
+        issue_key: Optional Jira ticket key
+        query: User query
+        dry_run: Whether to run in dry-run mode
+        user_id: User identifier for session
+        session_id: Session identifier for conversation threading
 
     Returns Response object from agent.
     """
+    # Create or retrieve ADK session
+    session = await get_or_create_session(
+        app_name="aegis",
+        user_id=user_id,
+        session_id=session_id
+    )
+    logger.info(f"Using session for user: {user_id}, session: {session_id}")
+    
+    # Initialize the orchestrator (which is now an ADK LlmAgent)
     agent = OrchestratorAgent(agent_id="orchestrator_dashboard")
+    
+    # Start the agent (initializes resources)
     await agent.start()
 
     payload = {
-        "issue_key": issue_key,
         "query": query,
+        "issue_key": issue_key,
         "dry_run": dry_run,
     }
+    
+    # Create message for backward compatibility
     message = AgentMessage(
         sender="hil_dashboard",
         recipient="orchestrator_dashboard",
@@ -70,6 +92,8 @@ async def _run_jira_agent_async(
     )
 
     try:
+        # Use handle_message which wraps the ADK generate/route logic
+        # TODO: Pass session to agent's generate() method
         response = await agent.handle_message(message)
     finally:
         await agent.stop()
@@ -77,13 +101,20 @@ async def _run_jira_agent_async(
     return response
 
 
-def run_jira_agent(issue_key: Optional[str], query: str, dry_run: bool):
+def run_jira_agent(issue_key: Optional[str], query: str, dry_run: bool, user_id: str, session_id: str):
     """
     Synchronous wrapper used by the Streamlit dashboard.
+    
+    Args:
+        issue_key: Optional Jira ticket key  
+        query: User query
+        dry_run: Whether to run in dry-run mode
+        user_id: User identifier for session
+        session_id: Session identifier for conversation threading
     """
     final_issue_key = _extract_issue_key(issue_key, query)
     print("final_issue_key is ",final_issue_key)
-    return asyncio.run(_run_jira_agent_async(final_issue_key, query, dry_run))
+    return asyncio.run(_run_jira_agent_async(final_issue_key, query, dry_run, user_id, session_id))
 
 
 async def _run_feedback_async(
@@ -95,26 +126,30 @@ async def _run_feedback_async(
 ) -> AgentResponse:
     """
     Process user feedback through the orchestrator.
-    The orchestrator will remember which agent handled the original query.
+    Creates a feedback query that gets routed to appropriate specialist.
     """
-    # For feedback, we use the orchestrator which will delegate to the appropriate agent
+    # Create orchestrator
     agent = OrchestratorAgent(agent_id="orchestrator_dashboard")
     await agent.start()
     
     try:
-        # The orchestrator's specialized agents have the feedback handler
-        # We'll call it through the query agent for now (both have same feedback logic)
-        response = await agent.query_agent.handle_feedback(
-            query=query,
-            docs_answer=docs_answer,
-            feedback_type=feedback_type,
-            additional_feedback=additional_feedback,
-            issue_key=issue_key,
-        )
+        # Prepare feedback data
+        feedback_data = {
+            "query": query,
+            "docs_answer": docs_answer,
+            "feedback_type": feedback_type,
+            "additional_feedback": additional_feedback,
+            "issue_key": issue_key
+        }
+        
+        # Delegate directly to the feedback agent via orchestrator
+        # This ensures deterministic handling instead of relying on intent classification
+        response = await agent.handle_feedback(feedback_data)
+        
+        return response
     finally:
         await agent.stop()
-    
-    return response
+
 
 
 def run_feedback(
@@ -193,9 +228,20 @@ st.set_page_config(
     layout="wide",
 )
 
+# Initialize user and session IDs for ADK session management
+if 'user_id' not in st.session_state:
+    from uuid import uuid4
+    st.session_state.user_id = str(uuid4())
+    logger.info(f"Created new user_id: {st.session_state.user_id}")
+
+if 'session_id' not in st.session_state:
+    from uuid import uuid4
+    st.session_state.session_id = str(uuid4())
+    logger.info(f"Created new session_id: {st.session_state.session_id}")
+
 # --- Sidebar Navigation ---
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Approvals Dashboard", "Jira Chargebee Agent"])
+page = st.sidebar.radio("Go to", ["Approvals Dashboard", "Jira Chargebee Agent"], index=1)
 
 if page == "Approvals Dashboard":
     st.title("🛡️ Aegis Human-in-Loop Dashboard")
@@ -297,6 +343,17 @@ elif page == "Jira Chargebee Agent":
     # Display chat messages from history on app rerun
     for idx, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
+            # Display agent name badge for assistant messages
+            if message["role"] == "assistant" and "agent_name" in message:
+                agent_name = message["agent_name"]
+                badge_color = "#4CAF50" if "onboarding" in agent_name.lower() else "#2196F3"
+                st.markdown(
+                    f'<span style="background-color: {badge_color}; color: white; padding: 2px 8px; '
+                    f'border-radius: 12px; font-size: 12px; font-weight: bold;">'
+                    f'🤖 {agent_name}</span>',
+                    unsafe_allow_html=True
+                )
+            
             st.markdown(message["content"])
             
             # Add feedback buttons for assistant messages (except the welcome message)
@@ -375,7 +432,7 @@ elif page == "Jira Chargebee Agent":
                                         st.session_state.messages[idx]["feedback_ticket"] = ticket_key
                                         
                                         # Show prominent success message with clickable link
-                                        jira_base_url = "https://jobsforrohanganesh.atlassian.net/browse"
+                                        jira_base_url = config.jira_base_url
                                         st.success(f"✅ {feedback_response.text}")
                                         st.info(f"🎫 **Track your feedback:** [{ticket_key}]({jira_base_url}/{ticket_key})")
                                     else:
@@ -398,7 +455,7 @@ elif page == "Jira Chargebee Agent":
                         ticket_key = message.get("feedback_ticket", "Unknown")
                         if ticket_key != "Unknown":
                             # Create clickable Jira link (adjust URL to match your Jira instance)
-                            jira_base_url = "https://jobsforrohanganesh.atlassian.net/browse"
+                            jira_base_url = config.jira_base_url
                             st.info(f"📝 **Feedback Ticket Created:** [{ticket_key}]({jira_base_url}/{ticket_key})")
                         else:
                             st.caption(f"📝 Feedback ticket created: {ticket_key}")
@@ -416,7 +473,9 @@ elif page == "Jira Chargebee Agent":
                 response = run_jira_agent(
                     issue_key=None, # Agent extracts this from query now
                     query=prompt, 
-                    dry_run=dry_run
+                    dry_run=dry_run,
+                    user_id=st.session_state.user_id,
+                    session_id=st.session_state.session_id
                 )
                 
                 agent_response_text = response.text
@@ -457,14 +516,24 @@ elif page == "Jira Chargebee Agent":
                 # Get issue_key if present (means query was about a specific ticket)
                 issue_key = response.metadata.get("issue_key") if response.metadata else None
                 
+                # Get agent name from metadata
+                agent_name = "Unknown Agent"
+                if response.metadata and "orchestrator" in response.metadata:
+                    agent_name = response.metadata["orchestrator"].get("routed_to", "Unknown Agent")
+                
                 # Add assistant response to chat history
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "content": agent_response_text,
                     "docs_answer": docs_answer_text,  # Store for feedback
-                    "issue_key": issue_key  # Store to determine feedback action
+                    "issue_key": issue_key,  # Store to determine feedback action
+                    "agent_name": agent_name  # Store agent name for display
                 })
+                
+                # Force rerun to display feedback buttons immediately
+                st.rerun()
                 
             except Exception as e:
                 st.error(f"Error: {str(e)}")
                 logger.error(f"Agent error: {e}", exc_info=True)
+

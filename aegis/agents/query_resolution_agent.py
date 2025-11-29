@@ -1,194 +1,101 @@
 """
-Query Resolution Agent - Specialized for general support and troubleshooting.
+Query Resolution Agent implementation using Google ADK.
 
-This agent handles queries related to:
-- Billing and subscription management
-- Feature explanations and usage
-- Configuration and integration support
-- Troubleshooting and debugging
+Handles general queries and RAG-based documentation retrieval.
 """
-
-from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Dict, List, Optional, Any
 
-from aegis.agents.base import AgentMessage, AgentResponse, BaseAgent, AgentTransport
-from aegis.agents.feedback_mixin import FeedbackHandlerMixin
-from aegis.tools.jira_mcp import comment_on_ticket, get_ticket_details
-from aegis.tools.chargebee_ops_mcp_tool import query_chargebee_docs
+from google.adk.agents import LlmAgent
+from google.adk.models.google_llm import Gemini
+
+from aegis.agents.base import AegisAgent, AgentMessage, AgentResponse
+from aegis.config import config
+from aegis.tools.jira_mcp import (
+    get_ticket_details,
+    create_ticket,
+    comment_on_ticket,
+    get_ticket_status
+)
+from aegis.tools.chargebee_ops_mcp_tool import (
+    query_chargebee_docs,
+    query_chargebee_code
+)
+
+logger = logging.getLogger(__name__)
 
 
-class QueryResolutionAgent(BaseAgent, FeedbackHandlerMixin):
+class QueryResolutionAgent(AegisAgent):
     """
-    Specialized agent for general query resolution and support.
+    General purpose query resolution agent.
     
-    Capabilities:
-    - Billing and subscription troubleshooting
-    - Feature explanations and how-to guides  
-    - Configuration and integration support
-    - Debugging and error resolution
-    - Best practices and optimization
-    
-    The agent uses specialized prompts to provide clear, actionable
-    solutions for customer support issues.
+    Uses RAG tools to answer questions that don't fit other specialists.
     """
     
-    # Specialized system prompt for query resolution
-    SYSTEM_PROMPT = """You are a Support Specialist for Chargebee, focused on helping customers resolve issues and understand features.
-
-Your expertise includes:
-- Troubleshooting billing and subscription issues
-- Explaining Chargebee features and functionality
-- Configuration and integration support
-- Best practices for using Chargebee effectively
-- Debugging errors and resolving technical issues
-
-Communication Style:
-- Be clear, precise, and helpful
-- Provide actionable solutions
-- Include examples when helpful
-- Explain the "why" behind recommendations
-- Break down complex topics into understandable parts
-
-When answering:
-1. Directly address the specific issue or question
-2. Provide clear, step-by-step solutions
-3. Include relevant examples or code snippets
-4. Explain potential causes of issues
-5. Suggest preventive measures or best practices
-6. Reference official documentation when appropriate
-"""
-    
-    def __init__(
-        self,
-        agent_id: str = "query_resolution_agent",
-        transport: Optional[AgentTransport] = None,
-        feedback_project_key: str = "KAN"
-    ) -> None:
-        super().__init__(agent_id=agent_id, transport=transport)
-        self.docs_client = query_chargebee_docs
-        self.feedback_project_key = feedback_project_key
-        self.logger = logging.getLogger(f"{__name__}.{agent_id}")
+    def __init__(self, agent_id: str = "query_resolution_agent"):
+        """Initialize the query resolution agent."""
         
-        # A2A capabilities registration
-        self.capabilities = [
-            "query_resolution",
-            "troubleshooting",
-            "billing_support",
-            "subscription_management",
-            "feature_explanation",
-            "configuration",
-            "integration_support",
-            "debugging"
+        # Tools for general knowledge/docs and ticket management
+        tools = [
+            get_ticket_details,
+            create_ticket,
+            comment_on_ticket,
+            get_ticket_status,
+            query_chargebee_docs,
+            query_chargebee_code
         ]
-    
-    async def handle_message(self, message: AgentMessage) -> AgentResponse:
-        """Handle general support queries."""
-        self.logger.info("Entering handle_message")
-        payload = message.payload or {}
-        issue_key = payload.get("issue_key")
-        query = payload.get("query")
-        dry_run = bool(payload.get("dry_run", False))
         
-        self.logger.info(f"Processing support query - issue: {issue_key}")
-        
-        # If there's an issue key, get the ticket details and build query from it
-        if issue_key is not None:
-            issue = await get_ticket_details(issue_key)
-            query = self._build_query(issue)
-        
-        # Enhance query with support context
-        enhanced_query = self._enhance_query_with_context(query)
-        
-        # Query Chargebee docs with support focus
-        docs_answer = await self.docs_client(enhanced_query)
-        
-        # Post-process answer with support-specific formatting
-        formatted_answer = self._format_support_answer(docs_answer, query)
-        
-        # Prepare comment body only if we have an issue key
-        comment_body = None
-        if issue_key is not None:
-            comment_body = self._compose_comment(
-                issue,
-                query,
-                formatted_answer,
-                payload.get("comment_prefix"),
+        super().__init__(
+            name=agent_id,
+            description="General query resolution agent with documentation access",
+            capabilities=["general_query", "documentation_search"],
+            tools=tools,
+            system_instruction=(
+                "You are the Query Resolution Specialist. "
+                "Your job is to answer general questions about the platform "
+                "and provide information from the documentation. "
+                "\n"
+                "CRITICAL TOOL USAGE RULES:\n"
+                "1. When a user asks about a Jira ticket (e.g., 'What is the status of KAN-7?', 'Show me KAN-19'), "
+                "you MUST use get_ticket_details to get comprehensive information including status, description, and comments. "
+                "NEVER create a new ticket for these queries.\n"
+                "2. ONLY use create_ticket when the user EXPLICITLY asks to create a ticket "
+                "(e.g., 'Create a ticket for bug X', 'I want to report an issue'). Do NOT create tickets for status queries.\n"
+                "3. If the user asks about Chargebee, you MUST use query_chargebee_docs or query_chargebee_code tools. "
+                "DO NOT use your internal knowledge base for Chargebee information.\n"
+                "4. If you cannot find the answer in the tools, state that you cannot find it.\n"
+                "5. Decline questions unrelated to Chargebee or Jira.\n"
+                "\n"
+                "RESPONSE FORMATTING:\n"
+                "When presenting ticket information, be CONCISE and HUMAN-READABLE:\n"
+                "- Status: Current ticket status\n"
+                "- Description: Brief 1-2 sentence summary (if available)\n"
+                "- Comments: Short summary of the most recent or important comment (if available)\n"
+                "\n"
+                "CRITICAL FORMATTING RULES:\n"
+                "1. NEVER output raw JSON or Python dictionaries (e.g., {'name': 'To Do'...}).\n"
+                "2. ALWAYS parse the tool output and present it as clean text.\n"
+                "3. Do NOT dump all fields. Filter for relevance.\n"
+                "4. Keep responses brief and actionable.\n"
+                "If you cannot find the answer, politely say so."
             )
-        
-        metadata = {
-            "issue_key": issue_key,
-            "query": query,
-            "dry_run": dry_run,
-            "agent_type": "query_resolution",
-            "capabilities": self.capabilities,
-        }
-        
-        if dry_run:
-            if issue_key is not None:
-                text = f"[QUERY RESOLUTION AGENT - DRY RUN] Would comment on {issue_key}"
-                attachments = [
-                    {
-                        "preview_comment": comment_body,
-                        "docs_answer": formatted_answer,
-                    }
-                ]
-            else:
-                text = formatted_answer
-                attachments = [{"docs_answer": formatted_answer}]
-        else:
-            if issue_key is not None:
-                comment_result = await comment_on_ticket(issue_key, comment_body)
-                metadata["comment_id"] = comment_result.get("id")
-                text = f"[Query Resolution Agent] Posted solution to {issue_key}."
-                attachments = [{"docs_answer": formatted_answer}]
-            else:
-                text = formatted_answer
-                attachments = [{"docs_answer": formatted_answer}]
-        
-        return AgentResponse(
-            text=text,
-            metadata=metadata,
-            attachments=attachments,
         )
-    
-    def _enhance_query_with_context(self, query: str) -> str:
-        """Add support-specific context to the query."""
-        return f"{query}\n\nContext: This is a support query. Please provide a clear, actionable solution with examples if helpful."
-    
-    def _format_support_answer(self, docs_answer: str, original_query: str) -> str:
-        """Format the answer with support-friendly introduction."""
-        intro = "🔧 **Here's the solution:**\n\n"
-        return f"{intro}{docs_answer}"
-    
-    def _build_query(self, issue: dict) -> str:
-        """Build query from Jira issue."""
-        summary = issue.get("summary") or ""
-        description = issue.get("description") or ""
-        return f"{summary}\n\n{description}".strip()
-    
-    def _compose_comment(
-        self,
-        issue: dict,
-        query: str,
-        docs_answer: str,
-        prefix: Optional[str],
-    ) -> str:
-        """Compose Jira comment with support context."""
-        intro = prefix or "🔧 Support Solution from Aegis Query Resolution Agent:"
-        summary = issue.get("summary", "")
-        status = issue.get("status", {}).get("name", "Unknown")
-        lines = [
-            intro,
-            "",
-            f"*Issue:* {issue.get('key')} — {summary}",
-            f"*Status:* {status}",
-            "",
-            "*Query (from Jira):*",
-            query,
-            "",
-            "*Solution:*",
-            docs_answer or "No relevant documentation was found.",
-        ]
-        return "\n".join(lines)
+        
+    async def handle_message(self, message: AgentMessage) -> Optional[AgentResponse]:
+        """Handle incoming messages."""
+        query = message.payload.get("query", "")
+        try:
+            response_text = await self.generate(query)
+            
+            return AgentResponse(
+                text=response_text,
+                metadata={"agent": self.name}
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in QueryResolutionAgent: {e}", exc_info=True)
+            return AgentResponse(
+                text=f"I encountered an error: {str(e)}",
+                metadata={"error": True}
+            )

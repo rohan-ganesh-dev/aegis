@@ -1,156 +1,238 @@
 """
-Orchestrator Agent - Routes queries to specialized agents.
+Orchestrator Agent implementation using Google ADK.
 
-This agent classifies incoming queries and routes them to the appropriate
-specialized agent (OnboardingAgent or QueryResolutionAgent).
+The Orchestrator is responsible for:
+1. Analyzing user intent
+2. Routing tasks to specialist agents via A2A protocol
+3. Synthesizing responses
 """
 
-from __future__ import annotations
-
 import logging
-import re
-from typing import Optional
+from typing import Dict, List, Optional, Any
 
-from aegis.agents.base import AgentMessage, AgentResponse, BaseAgent, AgentTransport
-from aegis.agents.feedback_mixin import FeedbackHandlerMixin
-from aegis.agents.onboarding_agent import OnboardingAgent
-from aegis.agents.query_resolution_agent import QueryResolutionAgent
+from google.adk.agents import LlmAgent
+from google.adk.models.google_llm import Gemini
+
+from aegis.agents.base import AegisAgent, AgentMessage, AgentResponse
+from aegis.config import config
+from aegis.runner import create_gemini_model
+
+logger = logging.getLogger(__name__)
 
 
-class OrchestratorAgent(BaseAgent, FeedbackHandlerMixin):
+from pydantic import PrivateAttr
+
+class OrchestratorAgent(AegisAgent):
     """
-    Orchestrator agent that routes queries to specialized agents.
+    Central orchestrator that routes queries to specialist agents.
     
-    Routing Logic:
-    - Classifies query as "onboarding" or "general"
-    - Routes to OnboardingAgent for onboarding-related queries
-    - Routes to QueryResolutionAgent for general support queries
-    - Tracks which agent handled each query
+    Uses Gemini to classify intent and delegates to local specialist agents.
     """
     
-    # Keywords for onboarding classification
-    ONBOARDING_KEYWORDS = [
-        'registration', 'register', 'signup', 'sign up',  'getting started',
-        'initial setup', 'onboard', 'welcome', 'new account', 'create account',
-        'first time', 'begin', 'start using', 'how do i start', 'setup guide',
-        'installation', 'configure initially', 'new customer', 'new user'
-    ]
+    _specialists: Dict[str, AegisAgent] = PrivateAttr(default_factory=dict)
     
-    # Keywords for query resolution (supplementary - most queries default here)
-    GENERAL_KEYWORDS = [
-        'billing', 'subscription', 'invoice', 'payment', 'charge',
-        'configuration', 'troubleshoot', 'error', 'issue', 'problem',
-        'how to use', 'how does', 'difference between', 'explain',
-        'integration', 'api', 'webhook', 'customize', 'modify'
-    ]
-    
-    def __init__(
-        self,
-        agent_id: str = "orchestrator_agent",
-        transport: Optional[AgentTransport] = None,
-        feedback_project_key: str = "KAN"
-    ) -> None:
-        super().__init__(agent_id=agent_id, transport=transport)
-        self.feedback_project_key = feedback_project_key
-        self.logger = logging.getLogger(f"{__name__}.{agent_id}")
-        
-        # Initialize specialized agents
-        self.onboarding_agent = OnboardingAgent(
-            agent_id="onboarding_agent",
-            transport=transport,
-            feedback_project_key=feedback_project_key
-        )
-        self.query_agent = QueryResolutionAgent(
-            agent_id="query_resolution_agent",
-            transport=transport,
-            feedback_project_key=feedback_project_key
-        )
-        
-        # A2A capabilities - orchestrator can handle any query by delegation
-        self.capabilities = [
-            "orchestration",
-            "routing",
-            "query_classification"
-        ]
-    
-    async def start(self) -> None:
-        """Start orchestrator and all specialized agents."""
-        await super().start()
-        await self.onboarding_agent.start()
-        await self.query_agent.start()
-        self.logger.info("All specialized agents started")
-    
-    async def stop(self) -> None:
-        """Stop orchestrator and all specialized agents."""
-        await self.onboarding_agent.stop()
-        await self.query_agent.stop()
-        await super().stop()
-        self.logger.info("All specialized agents stopped")
-    
-    def _classify_query(self, query: str) -> str:
+    def __init__(self, agent_id: str = "orchestrator"):
         """
-        Classify query as 'onboarding' or 'general'.
+        Initialize the orchestrator agent.
         
         Args:
-            query: User query to classify
+            agent_id: Unique identifier for the agent
+        """
+        # Create Gemini model for intent classification
+        model = create_gemini_model(
+            model_name="gemini-2.0-flash",
+            temperature=0.2,  # Lower temperature for classification
+        )
+        
+        super().__init__(
+            name=agent_id,
+            model=model,
+            description="Orchestrator agent that routes user queries to specialists",
+            capabilities=["intent_classification", "routing", "synthesis"],
+            system_instruction=(
+                "You are the Aegis Orchestrator. Your job is to analyze user queries "
+                "and route them to the appropriate specialist agent. "
+                "You have access to: "
+                "1. OnboardingAgent: For new customer onboarding, setup, and migration "
+                "2. QueryResolutionAgent: For general questions, features, bugs, and documentation"
+            )
+        )
+        
+        # Initialize specialist agents map
+        self._specialists = {}
+        self._init_specialists()
+
+    @property
+    def specialists(self):
+        """Expose specialists map."""
+        return self._specialists
+        
+    def _init_specialists(self):
+        """Initialize local specialist agents."""
+        # Import here to avoid circular dependencies
+        from aegis.agents.onboarding_agent import OnboardingAgent
+        from aegis.agents.query_resolution_agent import QueryResolutionAgent
+        from aegis.agents.feedback_agent import FeedbackAgent
+        
+        # Instantiate specialist agents locally
+        # Both agents now have full access to Jira + Chargebee tools
+        self._specialists["onboarding"] = OnboardingAgent()
+        self._specialists["query_resolution"] = QueryResolutionAgent()
+        self._specialists["feedback"] = FeedbackAgent()
+        
+    async def route_request(self, query: str, context: Dict[str, Any] = None) -> AgentResponse:
+        """
+        Analyze query and route to appropriate specialist.
+        
+        Args:
+            query: User query text
+            context: Optional context
             
         Returns:
-            'onboarding' or 'general'
+            AgentResponse from the specialist
         """
-        query_lower = query.lower()
+        # 1. Analyze intent using Gemini
+        intent_prompt = f"""
+        Analyze the following user query and determine the best agent to handle it.
         
-        # Check for onboarding keywords
-        onboarding_score = sum(
-            1 for keyword in self.ONBOARDING_KEYWORDS
-            if keyword in query_lower
-        )
+        Query: "{query}"
         
-        # Check for general keywords
-        general_score = sum(
-            1 for keyword in self.GENERAL_KEYWORDS
-            if keyword in query_lower
-        )
+        Available Agents:
+        - onboarding: STRICTLY for new customer setup, account creation, API key generation, and migration planning.
+        - query_resolution: For platform usage, API questions, feature how-to guides, bug reports, and general documentation queries.
         
-        # Decision logic
-        if onboarding_score > general_score:
-            return "onboarding"
-        elif onboarding_score > 0 and general_score == 0:
-            return "onboarding"
-        else:
-            # Default to general/query resolution for most queries
-            return "general"
-    
-    async def handle_message(self, message: AgentMessage) -> AgentResponse:
-        """Route message to appropriate specialized agent."""
-        self.logger.info("Orchestrator received message")
+        Guidelines:
+        - "How do I create a customer?" -> query_resolution (Usage/API)
+        - "How do I set up my account?" -> onboarding (Setup)
+        - "My payment failed" -> query_resolution (Issue)
+        - "I need to migrate from Stripe" -> onboarding (Migration)
+        - "Where do I find my API keys?" -> onboarding (Setup)
         
-        payload = message.payload or {}
-        query = payload.get("query", "")
+        Return ONLY the agent name (onboarding or query_resolution).
+        """
         
-        # Classify the query
-        classification = self._classify_query(query)
+        try:
+            intent_response = await self.generate(intent_prompt)
+            target_agent = intent_response.strip().lower()
+            
+            logger.info(f"Routed query '{query}' to {target_agent}")
+            
+            # 2. Forward to specialist
+            if target_agent in self._specialists:
+                specialist = self._specialists[target_agent]
+                
+                # Start the specialist agent
+                await specialist.start()
+                
+                try:
+                    # Create message to send to specialist
+                    message = AgentMessage(
+                        sender=self.name,
+                        recipient=specialist.name,
+                        type="task",
+                        payload={"query": query, **(context or {})}
+                    )
+                    
+                    # Call the specialist's handle_message method
+                    response = await specialist.handle_message(message)
+                    
+                    # Add routing metadata
+                    if response.metadata is None:
+                        response.metadata = {}
+                    response.metadata["routed_to"] = target_agent
+                    response.metadata["orchestrator"] = {
+                        "routed_to": specialist.name,
+                        "classification": target_agent
+                    }
+                    
+                    return response
+                finally:
+                    # Stop the specialist agent
+                    await specialist.stop()
+            else:
+                # Fallback to local handling if agent not found
+                return AgentResponse(
+                    text=f"I couldn't find an appropriate specialist for: {query}. Available specialists: {list(self._specialists.keys())}",
+                    metadata={"routed_to": "self", "error": "no_specialist_found"}
+                )
+                
+        except Exception as e:
+            logger.error(f"Routing error: {e}", exc_info=True)
+            return AgentResponse(
+                text=f"Error routing request: {str(e)}",
+                metadata={"error": True}
+            )
+
+    async def handle_feedback(self, feedback_data: Dict[str, Any]) -> AgentResponse:
+        """
+        Delegate feedback handling to the FeedbackAgent.
         
-        self.logger.info(f"Query classified as: {classification}")
-        self.logger.info(f"Query: {query[:100]}...")
+        Args:
+            feedback_data: Dictionary containing feedback details
+            
+        Returns:
+            AgentResponse from the feedback agent
+        """
+        feedback_type = feedback_data.get("feedback_type", "unknown")
         
-        # Route to appropriate agent
-        if classification == "onboarding":
-            self.logger.info("Routing to OnboardingAgent")
-            response = await self.onboarding_agent.handle_message(message)
-            routed_to = "OnboardingAgent"
-        else:
-            self.logger.info("Routing to QueryResolutionAgent")
-            response = await self.query_agent.handle_message(message)
-            routed_to = "QueryResolutionAgent"
+        # If feedback is positive (thumbs up), just acknowledge and return
+        if feedback_type == "positive":
+            logger.info("Received positive feedback - no action needed")
+            return AgentResponse(
+                text="Thank you for your positive feedback! We're glad we could help.",
+                metadata={"feedback_type": "positive", "action": "acknowledged"}
+            )
         
-        # Add orchestrator metadata
-        if response.metadata is None:
-            response.metadata = {}
+        # Only create tickets or add comments for negative feedback
+        agent = self._specialists["feedback"]
+        await agent.start()
         
-        response.metadata["orchestrator"] = {
-            "agent_id": self.agent_id,
-            "classification": classification,
-            "routed_to": routed_to,
-        }
-        
-        return response
+        try:
+            # Create a prompt for the feedback agent
+            query = feedback_data.get("query", "")
+            additional_feedback = feedback_data.get("additional_feedback", "")
+            docs_answer = feedback_data.get("docs_answer", "")
+            issue_key = feedback_data.get("issue_key")  # Extract issue_key
+            
+            # Include issue_key in the prompt if present
+            if issue_key:
+                prompt = f"""
+Analyze this user feedback and ADD A COMMENT to the existing ticket {issue_key}.
+
+Feedback Type: {feedback_type}
+Original User Query: "{query}"
+Agent Answer: "{docs_answer}"
+User Comments: "{additional_feedback}"
+Existing Ticket: {issue_key}
+
+Use comment_on_ticket to add this feedback to ticket {issue_key}.
+                """
+            else:
+                prompt = f"""
+Analyze this user feedback and CREATE A NEW Jira ticket.
+
+Feedback Type: {feedback_type}
+Original User Query: "{query}"
+Agent Answer: "{docs_answer}"
+User Comments: "{additional_feedback}"
+
+Please create a ticket with a clear summary and description.
+                """
+            
+            message = AgentMessage(
+                sender=self.name,
+                recipient=agent.name,
+                type="task",
+                payload={"query": prompt, "issue_key": issue_key}  # Pass issue_key in payload
+            )
+            
+            response = await agent.handle_message(message)
+            return response
+            
+        finally:
+            await agent.stop()
+
+    async def handle_message(self, message: AgentMessage) -> Optional[AgentResponse]:
+        """Override handle_message to use routing logic."""
+        query = message.payload.get("query", "")
+        return await self.route_request(query, message.payload)

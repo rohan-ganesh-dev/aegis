@@ -1,190 +1,95 @@
 """
-Onboarding Agent - Specialized for customer onboarding and registration queries.
+Onboarding Agent implementation using Google ADK.
 
-This agent handles queries related to:
-- Customer registration and account setup
-- Initial configuration procedures
-- Onboarding best practices
-- Getting started guides
+Handles customer onboarding, documentation, and setup guidance.
 """
-
-from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Dict, List, Optional, Any
 
-from aegis.agents.base import AgentMessage, AgentResponse, BaseAgent, AgentTransport
-from aegis.agents.feedback_mixin import FeedbackHandlerMixin
-from aegis.tools.jira_mcp import comment_on_ticket, get_ticket_details
-from aegis.tools.chargebee_ops_mcp_tool import query_chargebee_docs
+from google.adk.agents import LlmAgent
+from google.adk.models.google_llm import Gemini
+
+from aegis.agents.base import AegisAgent, AgentMessage, AgentResponse
+from aegis.config import config
+from aegis.tools.jira_mcp import (
+    get_ticket_details,
+    create_ticket,
+    comment_on_ticket,
+    get_ticket_status
+)
+from aegis.tools.chargebee_ops_mcp_tool import (
+    query_chargebee_docs,
+    query_chargebee_code
+)
+
+logger = logging.getLogger(__name__)
 
 
-class OnboardingAgent(BaseAgent, FeedbackHandlerMixin):
+class OnboardingAgent(AegisAgent):
     """
-    Specialized agent for onboarding and registration support.
+    Specialist agent for customer onboarding.
     
-    Capabilities:
-    - Customer registration and account setup
-    - Initial configuration procedures
-    - Onboarding best practices
-    - Getting started guides
-    
-    The agent uses specialized prompts to provide step-by-step guidance
-    for new users getting started with Chargebee.
+    Assists with:
+    - Account setup guidance
+    - Migration planning
+    - Integration steps
     """
     
-    # Specialized system prompt for onboarding
-    SYSTEM_PROMPT = """You are an Onboarding Specialist for Chargebee, focused on helping new customers get started successfully.
-
-Your expertise includes:
-- Customer registration and account setup
-- Initial configuration and setup procedures
-- Onboarding best practices and workflows
-- Getting started guides and tutorials
-- First-time user guidance
-
-Communication Style:
-- Be warm, welcoming, and encouraging
-- Provide step-by-step guidance
-- Use simple, clear language
-- Include helpful tips for new users
-- Anticipate common beginner questions
-
-When answering:
-1. Start with a clear, concise answer
-2. Provide step-by-step instructions when applicable
-3. Highlight important first steps
-4. Mention common pitfalls to avoid
-5. Encourage users and build their confidence
-"""
-    
-    def __init__(
-        self,
-        agent_id: str = "onboarding_agent",
-        transport: Optional[AgentTransport] = None,
-        feedback_project_key: str = "KAN"
-    ) -> None:
-        super().__init__(agent_id=agent_id, transport=transport)
-        self.docs_client = query_chargebee_docs
-        self.feedback_project_key = feedback_project_key
-        self.logger = logging.getLogger(f"{__name__}.{agent_id}")
+    def __init__(self, agent_id: str = "onboarding_agent"):
+        """Initialize the onboarding agent."""
         
-        # A2A capabilities registration
-        self.capabilities = [
-            "onboarding",
-            "registration",
-            "setup",
-            "getting_started",
-            "customer_creation",
-            "account_setup"
+        # Define tools available to the agent
+        # Onboarding agent needs access to documentation and ticket creation
+        tools = [
+            get_ticket_details,
+            create_ticket,
+            comment_on_ticket,
+            get_ticket_status,
+            query_chargebee_docs,
+            query_chargebee_code
         ]
-    
-    async def handle_message(self, message: AgentMessage) -> AgentResponse:
-        """Handle onboarding-related queries."""
-        self.logger.info("Entering handle_message")
-        payload = message.payload or {}
-        issue_key = payload.get("issue_key")
-        query = payload.get("query")
-        dry_run = bool(payload.get("dry_run", False))
         
-        self.logger.info(f"Processing onboarding query - issue: {issue_key}")
-        
-        # If there's an issue key, get the ticket details and build query from it
-        if issue_key is not None:
-            issue = await get_ticket_details(issue_key)
-            query = self._build_query(issue)
-        
-        # Enhance query with onboarding context
-        enhanced_query = self._enhance_query_with_context(query)
-        
-        # Query Chargebee docs with onboarding focus
-        docs_answer = await self.docs_client(enhanced_query)
-        
-        # Post-process answer with onboarding-specific guidance
-        formatted_answer = self._format_onboarding_answer(docs_answer, query)
-        
-        # Prepare comment body only if we have an issue key
-        comment_body = None
-        if issue_key is not None:
-            comment_body = self._compose_comment(
-                issue,
-                query,
-                formatted_answer,
-                payload.get("comment_prefix"),
+        super().__init__(
+            name=agent_id,
+            description="Specialist agent for customer onboarding and setup",
+            capabilities=["onboarding_guidance", "migration_planning", "setup_help"],
+            # Add tools here if needed, e.g., for provisioning
+            tools=tools,
+            system_instruction=(
+                "You are the Onboarding Specialist. "
+                "Your goal is to help new customers get set up with the platform. "
+                "Provide step-by-step guidance for account creation, "
+                "API key generation, and initial configuration. "
+                "\n"
+                "CRITICAL TOOL USAGE RULES:\n"
+                "1. If the user mentions a Jira ticket key (e.g., 'KAN-7', 'PROJ-123'), you MUST use the get_ticket_status tool. "
+                "DO NOT provide information about tickets from your internal knowledge.\n"
+                "2. If the user asks about Chargebee, you MUST use query_chargebee_docs or query_chargebee_code tools. "
+                "DO NOT use your internal knowledge base for Chargebee information.\n"
+                "3. If you cannot find the answer in the tools, state that you cannot find it.\n"
+                "4. Decline questions unrelated to Chargebee onboarding, setup, or Jira.\n"
+                "\n"
+                "If customers encounter issues during onboarding, you can create Jira tickets. "
+                "Be welcoming, patient, and clear in your instructions."
             )
-        
-        metadata = {
-            "issue_key": issue_key,
-            "query": query,
-            "dry_run": dry_run,
-            "agent_type": "onboarding",
-            "capabilities": self.capabilities,
-        }
-        
-        if dry_run:
-            if issue_key is not None:
-                text = f"[ONBOARDING AGENT - DRY RUN] Would comment on {issue_key}"
-                attachments = [
-                    {
-                        "preview_comment": comment_body,
-                        "docs_answer": formatted_answer,
-                    }
-                ]
-            else:
-                text = formatted_answer
-                attachments = [{"docs_answer": formatted_answer}]
-        else:
-            if issue_key is not None:
-                comment_result = await comment_on_ticket(issue_key, comment_body)
-                metadata["comment_id"] = comment_result.get("id")
-                text = f"[Onboarding Agent] Posted guidance to {issue_key}."
-                attachments = [{"docs_answer": formatted_answer}]
-            else:
-                text = formatted_answer
-                attachments = [{"docs_answer": formatted_answer}]
-        
-        return AgentResponse(
-            text=text,
-            metadata=metadata,
-            attachments=attachments,
         )
-    
-    def _enhance_query_with_context(self, query: str) -> str:
-        """Add onboarding-specific context to the query."""
-        return f"{query}\n\nContext: This is for a new customer just getting started with Chargebee. Please provide beginner-friendly, step-by-step guidance."
-    
-    def _format_onboarding_answer(self, docs_answer: str, original_query: str) -> str:
-        """Format the answer with onboarding-friendly introduction."""
-        intro = "🌟 **Welcome to Chargebee!** Here's how to get started:\n\n"
-        return f"{intro}{docs_answer}"
-    
-    def _build_query(self, issue: dict) -> str:
-        """Build query from Jira issue."""
-        summary = issue.get("summary") or ""
-        description = issue.get("description") or ""
-        return f"{summary}\n\n{description}".strip()
-    
-    def _compose_comment(
-        self,
-        issue: dict,
-        query: str,
-        docs_answer: str,
-        prefix: Optional[str],
-    ) -> str:
-        """Compose Jira comment with onboarding context."""
-        intro = prefix or "🌟 Onboarding Guidance from Aegis Onboarding Agent:"
-        summary = issue.get("summary", "")
-        status = issue.get("status", {}).get("name", "Unknown")
-        lines = [
-            intro,
-            "",
-            f"*Issue:* {issue.get('key')} — {summary}",
-            f"*Status:* {status}",
-            "",
-            "*Query (from Jira):*",
-            query,
-            "",
-            "*Onboarding Guidance:*",
-            docs_answer or "No relevant documentation was found.",
-        ]
-        return "\n".join(lines)
+        
+    async def handle_message(self, message: AgentMessage) -> Optional[AgentResponse]:
+        """Handle incoming messages."""
+        query = message.payload.get("query", "")
+        
+        try:
+            response_text = await self.generate(query)
+            
+            return AgentResponse(
+                text=response_text,
+                metadata={"agent": self.name}
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in OnboardingAgent: {e}", exc_info=True)
+            return AgentResponse(
+                text=f"I encountered an error: {str(e)}",
+                metadata={"error": True}
+            )

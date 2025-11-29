@@ -1,19 +1,8 @@
 """A2A Protocol module for agent discoverability."""
 
 from aegis.protocols.a2a_protocol import (
-    A2ARegistry,
-    AgentCapability,
-    AgentRegistration,
-    discover_agents,
-    get_registry,
-    register_agent,
+    create_remote_agent,
+    expose_agent_as_a2a,
 )
 
-__all__ = [
-    "A2ARegistry",
-    "AgentCapability",
-    "AgentRegistration",
-    "get_registry",
-    "register_agent",
-    "discover_agents",
-]
+__all__ = ["create_remote_agent", "expose_agent_as_a2a", "discover_agents"]

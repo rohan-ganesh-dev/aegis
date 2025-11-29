@@ -1,173 +1,78 @@
 """
-Agent-to-Agent (A2A) Protocol for agent discovery and communication.
+Agent-to-Agent (A2A) Protocol implementation using Google ADK.
 
-This module provides a simple protocol for agents to register their
-capabilities and discover other agents in the system.
+This module provides utilities for:
+- Agent discovery via Agent Cards
+- A2A communication using RemoteA2aAgent
+- Conversion of local agents to A2A-compatible interfaces
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Any
+
+from google.adk.agents import LlmAgent
+from google.adk.agents.remote_a2a_agent import (
+    RemoteA2aAgent,
+    AGENT_CARD_WELL_KNOWN_PATH,
+)
+from google.adk.a2a.utils.agent_to_a2a import to_a2a
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class AgentCapability:
-    """Describes an agent's capability."""
-    name: str
-    description: Optional[str] = None
-    
-
-@dataclass
-class AgentRegistration:
-    """Registration record for an A2A-enabled agent."""
-    agent_id: str
-    capabilities: List[str]
-    description: str
-    agent_instance: Optional[any] = None  # Reference to actual agent
-    metadata: Dict[str, any] = field(default_factory=dict)
+# Standard path for agent card discovery
+WELL_KNOWN_PATH = AGENT_CARD_WELL_KNOWN_PATH
 
 
-class A2ARegistry:
-    """
-    Central registry for A2A agent discovery.
-    
-    Agents register themselves with their capabilities,
-    and other agents can discover them by capability.
-    """
-    
-    def __init__(self):
-        self._registrations: Dict[str, AgentRegistration] = {}
-        self._capability_index: Dict[str, Set[str]] = {}  # capability -> set of agent_ids
-        self.logger = logging.getLogger(f"{__name__}.A2ARegistry")
-    
-    def register_agent(
-        self,
-        agent_id: str,
-        capabilities: List[str],
-        description: str,
-        agent_instance: Optional[any] = None,
-        metadata: Optional[Dict[str, any]] = None
-    ) -> None:
-        """
-        Register an agent with the A2A registry.
-        
-        Args:
-            agent_id: Unique agent identifier
-            capabilities: List of capability strings
-            description: Human-readable agent description
-            agent_instance: Optional reference to the agent instance
-            metadata: Optional additional metadata
-        """
-        registration = AgentRegistration(
-            agent_id=agent_id,
-            capabilities=capabilities,
-            description=description,
-            agent_instance=agent_instance,
-            metadata=metadata or {}
-        )
-        
-        self._registrations[agent_id] = registration
-        
-        # Index by capabilities
-        for capability in capabilities:
-            if capability not in self._capability_index:
-                self._capability_index[capability] = set()
-            self._capability_index[capability].add(agent_id)
-        
-        self.logger.info(f"Registered agent: {agent_id} with capabilities: {capabilities}")
-    
-    def unregister_agent(self, agent_id: str) -> None:
-        """Remove an agent from the registry."""
-        if agent_id not in self._registrations:
-            return
-        
-        registration = self._registrations[agent_id]
-        
-        # Remove from capability index
-        for capability in registration.capabilities:
-            if capability in self._capability_index:
-                self._capability_index[capability].discard(agent_id)
-                if not self._capability_index[capability]:
-                    del self._capability_index[capability]
-        
-        del self._registrations[agent_id]
-        self.logger.info(f"Unregistered agent: {agent_id}")
-    
-    def discover_by_capability(self, capability: str) -> List[AgentRegistration]:
-        """
-        Find all agents that have a specific capability.
-        
-        Args:
-            capability: Capability to search for
-            
-        Returns:
-            List of AgentRegistration objects
-        """
-        agent_ids = self._capability_index.get(capability, set())
-        return [self._registrations[aid] for aid in agent_ids]
-    
-    def discover_by_capabilities(self, capabilities: List[str], match_all: bool = False) -> List[AgentRegistration]:
-        """
-        Find agents that have one or more of the specified capabilities.
-        
-        Args:
-            capabilities: List of capabilities to search for
-            match_all: If True, only return agents that have ALL capabilities
-            
-        Returns:
-            List of AgentRegistration objects
-        """
-        if match_all:
-            # Find agents that have all specified capabilities
-            agent_sets = [self._capability_index.get(cap, set()) for cap in capabilities]
-            if not agent_sets:
-                return []
-            matching_ids = set.intersection(*agent_sets)
-        else:
-            # Find agents that have any of the specified capabilities
-            matching_ids = set()
-            for capability in capabilities:
-                matching_ids.update(self._capability_index.get(capability, set()))
-        
-        return [self._registrations[aid] for aid in matching_ids]
-    
-    def get_agent(self, agent_id: str) -> Optional[AgentRegistration]:
-        """Get registration for a specific agent."""
-        return self._registrations.get(agent_id)
-    
-    def list_all_agents(self) -> List[AgentRegistration]:
-        """List all registered agents."""
-        return list(self._registrations.values())
-    
-    def list_all_capabilities(self) -> List[str]:
-        """List all registered capabilities."""
-        return list(self._capability_index.keys())
-
-
-# Global registry instance
-_global_registry = A2ARegistry()
-
-
-def get_registry() -> A2ARegistry:
-    """Get the global A2A registry instance."""
-    return _global_registry
-
-
-def register_agent(
+def create_remote_agent(
+    base_url: str,
     agent_id: str,
-    capabilities: List[str],
-    description: str,
-    agent_instance: Optional[any] = None,
-    metadata: Optional[Dict[str, any]] = None
-) -> None:
-    """Convenience function to register with global registry."""
-    _global_registry.register_agent(agent_id, capabilities, description, agent_instance, metadata)
+    api_key: Optional[str] = None
+) -> RemoteA2aAgent:
+    """
+    Create a RemoteA2aAgent client for communicating with another agent.
+    
+    Args:
+        base_url: Base URL of the remote agent (e.g., http://localhost:8001)
+        agent_id: ID/Name of the remote agent
+        api_key: Optional API key for authentication
+        
+    Returns:
+        Configured RemoteA2aAgent instance
+    """
+    # Ensure URL doesn't end with slash
+    if base_url.endswith("/"):
+        base_url = base_url[:-1]
+        
+    agent_card_url = f"{base_url}{WELL_KNOWN_PATH}"
+    
+    logger.info(f"Creating remote agent client for {agent_id} at {base_url} (Card: {agent_card_url})")
+    
+    # RemoteA2aAgent requires name and agent_card
+    return RemoteA2aAgent(
+        name=agent_id,
+        agent_card=agent_card_url,
+        # api_key handling depends on ADK version, passing in kwargs if supported
+        # or it might need to be configured via client factory
+    )
 
 
-def discover_agents(capability: str) -> List[AgentRegistration]:
-    """Convenience function to discover agents by capability."""
-    return _global_registry.discover_by_capability(capability)
+def expose_agent_as_a2a(agent: LlmAgent, host: str = "0.0.0.0", port: int = 8000):
+    """
+    Utility to expose a local LlmAgent as an A2A service.
+    
+    This is typically used in the agent's startup code.
+    
+    Args:
+        agent: The LlmAgent instance to expose
+        host: Host to bind to
+        port: Port to bind to
+    """
+    # This uses the ADK's to_a2a utility to create a FastAPI app
+    logger.info(f"Exposing agent {agent.name} on {host}:{port}")
+    
+    # Note: to_a2a typically returns a FastAPI app
+    app = to_a2a(agent)
+    
+    return app

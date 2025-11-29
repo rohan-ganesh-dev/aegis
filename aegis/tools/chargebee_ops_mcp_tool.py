@@ -188,13 +188,21 @@ async def list_chargebee_tools() -> list[str]:
 
 async def query_chargebee_docs(query: str) -> str:
     """
-    Query Chargebee documentation via the MCP server.
+    Search Chargebee documentation for concept explanations and troubleshooting help.
+    
+    Use this tool when users ask questions about:
+    - How Chargebee features work (subscriptions, billing, invoices, etc.)
+    - Chargebee product concepts and workflows
+    - Configuration and setup instructions
+    - Troubleshooting common issues
+    - General 'how to' questions about Chargebee
     
     Args:
-        query: The search query or question about Chargebee docs
+        query: The user's question or search query about Chargebee.
+               Example: "How do I set up recurring billing?"
     
     Returns:
-        String containing the documentation response
+        String containing relevant documentation excerpts and explanations.
     """
     try:
         async with chargebee_mcp_client() as client:
@@ -236,14 +244,23 @@ async def query_chargebee_docs(query: str) -> str:
 
 async def query_chargebee_code(query: str, task_id: str = None) -> str:
     """
-    Query Chargebee for code examples and API documentation via the code_generation_agent.
+    Get code examples and API documentation for Chargebee integrations.
+    
+    Use this tool when users ask for:
+    - Code examples or implementation samples
+    - API endpoint usage and parameters
+    - SDK integration code
+    - Specific implementation details
+    - Programming language-specific examples (Python, Node.js, PHP, etc.)
     
     Args:
-        query: The code-related query (e.g., "How to create a subscription in Node.js")
-        task_id: Optional task ID to reuse context from previous calls
+        query: The code-related query. Be specific about programming language if relevant.
+               Example: "How to create a subscription in Node.js"
+        task_id: Optional task ID to maintain context across related queries.
+                Default is None for new queries.
     
     Returns:
-        String containing code examples and API documentation
+        String containing code examples, API documentation, and implementation guidance.
     """
     try:
         async with chargebee_mcp_client() as client:

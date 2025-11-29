@@ -247,7 +247,7 @@ if 'session_id' not in st.session_state:
 
 # --- Sidebar Navigation ---
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Approvals Dashboard", "Jira Chargebee Agent"], index=1)
+page = st.sidebar.radio("Go to", ["Jira Chargebee Agent"], index=0)
 
 if page == "Approvals Dashboard":
     st.title("🛡️ Aegis Human-in-Loop Dashboard")

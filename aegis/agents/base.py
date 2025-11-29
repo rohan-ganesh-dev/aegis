@@ -294,18 +294,17 @@ class AegisAgent(LlmAgent):
             for i, code in enumerate(code_blocks, 1):
                 formatted_codes += f"\nExample {i}:\n```python\n{code.strip()}\n```\n"
         
-        return f"""**Section 1 - Diagnostic Results:**
-What I found:
+        return f"""**Diagnostic Results:**
+- Found information about {user_query}
+- Retrieved from {func_name} tool
 {content_str[:500]}...
 
-**Section 2 - Actions Taken:**
-What I did to get this information:
-- Called {func_name} tool to search Chargebee documentation
+**Actions Taken:**
+- Executed {func_name} tool to search Chargebee documentation
 - Retrieved integration guides and code examples
 {formatted_codes}
 
-**Section 3 - Next Steps:**
-What you should do now:
+**Next Steps:**
 1. Install the SDK: `pip install chargebee`
 2. Try the code examples above
 3. Check the full documentation at: https://apidocs.chargebee.com/docs/api?lang=python

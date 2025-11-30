@@ -105,8 +105,12 @@ def render_execution_flow(execution_steps: List[Dict[str, Any]]) -> None:
         
         html += '</div>'
         
-        # Display HTML
-        st.markdown(html, unsafe_allow_html=True)
+        # Display HTML using st.html() for proper rendering
+        try:
+            st.html(html)
+        except AttributeError:
+            # Fallback for older Streamlit versions
+            st.markdown(html, unsafe_allow_html=True)
 
 
 
@@ -420,12 +424,21 @@ elif page == "Jira Chargebee Agent":
         "Active Customer": "demo_active_customer",
         "At-Risk Customer": "demo_at_risk_customer"
     }
+    
+    # Initialize default customer if not set
+    if "customer_id" not in st.session_state:
+        st.session_state.customer_id = "demo_new_customer"
+    
     selected_customer_name = st.sidebar.selectbox(
         "Select Demo Customer",
         options=list(customer_options.keys()),
+        index=0,  # Default to first option
         help="Switch between different customer scenarios"
     )
-    st.session_state.customer_id = customer_options[selected_customer_name]
+    
+    # Only update if selection is valid
+    if selected_customer_name and selected_customer_name in customer_options:
+        st.session_state.customer_id = customer_options[selected_customer_name]
     
     # Fetch and display customer profile
     try:
@@ -541,13 +554,34 @@ elif page == "Jira Chargebee Agent":
                 created_at = datetime.fromisoformat(intervention['created_at'])
                 time_str = created_at.strftime("%H:%M:%S")
                 
+                # Determine if intervention has enhanced agentic fields
+                has_diagnosis = 'diagnosis' in intervention
+                
                 with st.sidebar.expander(f"{intervention['type'].replace('_', ' ').title()} • {time_str}", expanded=False):
                     st.markdown(f"**Customer:** {intervention['customer_name']}")
-                    st.markdown(f"**Reason:** {intervention['reason']}")
                     st.markdown(f"**Priority:** {intervention['priority'].upper()}")
-                    st.caption(intervention['message'][:100] + "...")
+                    
+                    if has_diagnosis:
+                        # Enhanced format with Diagnosis, Actions, Next Steps
+                        st.markdown("---")
+                        st.markdown("**📊 Diagnosis:**")
+                        st.caption(intervention['diagnosis'])
+                        
+                        st.markdown("**⚡ Actions Taken:**")
+                        st.caption(intervention['actions_taken'])
+                        
+                        st.markdown("**📋 Next Steps:**")
+                        st.caption(intervention['next_steps'])
+                        
+                        # Show Jira ticket if created
+                        if intervention.get('jira_ticket'):
+                            st.success(f"🎫 Ticket: {intervention['jira_ticket']}")
+                    else:
+                        # Legacy format
+                        st.markdown(f"**Reason:** {intervention['reason']}")
+                        st.caption(intervention['message'][:100] + "...")
         else:
-            st.sidebar.info("No recent interventions yet. Updates every 15 seconds.")
+            st.sidebar.info("No recent interventions yet. Monitor runs every 60 seconds.")
     except Exception as e:
         st.sidebar.caption(f"Monitor error: {str(e)}")
     

@@ -75,20 +75,22 @@ Open http://localhost:8501 to access:
 - **Approvals Dashboard**: Review and approve high-value agent actions
 - **Feedback System**: Provide feedback on agent responses (automatically creates Jira tickets for issues)
 
-#### 2. Run Activity Simulator (Optional - for Proactive Interventions Demo)
+#### 2. Trigger Proactive Interventions (Simulate Traffic)
 
-The dashboard includes **automatic simulation** that triggers every 15 seconds. However, you can also run the external simulator for additional activity:
+For the demo, you can manually trigger customer activity spikes (errors, usage changes) directly from the dashboard:
 
-```bash
-python3 simulate_activity.py
-```
+1.  Click the **"🎲 Simulate Traffic"** button in the sidebar.
+2.  This simulates random events (e.g., 401 error spikes, declining usage) for the demo customers.
+3.  Wait a few seconds or click **"🔄 Check Now"**.
+4.  View the generated alerts in the **"🔔 Proactive Interventions"** sidebar section.
 
-This will:
-- Simulate customer activity changes every 15 seconds (error spikes, usage trends, onboarding issues)
-- Trigger proactive health monitoring
-- Generate interventions visible in the dashboard sidebar under "🔔 Proactive Interventions"
+#### 3. Verify Jira Integration
 
-**Note**: The dashboard's built-in "🔄 Check Now" button provides the same functionality, so this is optional.
+Aegis autonomously creates Jira tickets for critical issues. To verify:
+
+1.  **Trigger High Errors**: Click "Simulate Traffic" until you see a "High Error Rate" intervention.
+2.  **Check for Ticket**: Look for the **"🎫 Ticket: KAN-XX"** link in the intervention card.
+3.  **Verify Deduplication**: Click "Simulate Traffic" again. Notice that the **same ticket key** is reused (no duplicates created).
 
 
 

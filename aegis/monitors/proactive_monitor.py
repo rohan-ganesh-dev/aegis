@@ -42,6 +42,7 @@ class ProactiveMonitor:
         self.running = False
         self._task: Optional[asyncio.Task] = None
         self.interventions: List[Dict[str, Any]] = []  # Store interventions for UI
+        self.state_manager = get_state_manager()
         logger.info(f"ProactiveMonitor initialized (interval: {check_interval_seconds}s)")
     
     async def start(self):
@@ -153,17 +154,32 @@ class ProactiveMonitor:
             if not self._recently_intervened(customer.customer_id, "error_debugging"):
                 logger.info(f"🚨 High error rate: {customer.customer_id} ({health['metrics']['error_rate']:.1%})")
                 
-                # Auto-create Jira ticket for high error rates via FeedbackAgent
-                jira_ticket = None
-                if health["metrics"]["error_rate"] > 0.15:
+                # Auto-create Jira ticket for high error rates
+                jira_ticket = customer.active_ticket_key
+                should_create_ticket = True
+                
+                # Check if we recently created a ticket (deduplication)
+                if jira_ticket and customer.last_ticket_at:
+                    if customer.last_ticket_at > datetime.now() - timedelta(hours=24):
+                        should_create_ticket = False
+                        logger.info(f"♻️ Reusing existing ticket {jira_ticket} for {customer.company}")
+
+                if should_create_ticket and health["metrics"]["error_rate"] > 0.15:
                     try:
-                        jira_ticket = await self._create_jira_ticket(
+                        new_ticket = await self._create_jira_ticket(
                             customer=customer,
                             issue_type="Bug",
                             summary=f"🚨 High Error Rate Alert: {customer.company}",
                             description=f"**Customer**: {customer.company} ({customer.customer_id})\\n\\n**Error Rate**: {health['metrics']['error_rate']:.1%}\\n\\n**Total API Calls**: {customer.total_api_calls}\\n\\n**Issue**: Systematic integration issues detected. Likely authentication or API parameter problems requiring immediate debugging support.\\n\\n**Priority**: HIGH - Requires technical review within 2 hours."
                         )
-                        logger.info(f"✅ Auto-created Jira ticket: {jira_ticket}")
+                        if new_ticket:
+                            jira_ticket = new_ticket
+                            logger.info(f"✅ Auto-created Jira ticket: {jira_ticket}")
+                            # Update customer state with new ticket info
+                            await self.state_manager.update_customer(customer.customer_id, {
+                                "last_ticket_at": datetime.now(),
+                                "active_ticket_key": jira_ticket
+                            })
                     except Exception as e:
                         logger.error(f"Failed to create Jira ticket: {e}")
                 
@@ -193,14 +209,46 @@ class ProactiveMonitor:
             if not self._recently_intervened(customer.customer_id, "retention_outreach"):
                 logger.info(f"🚨 Declining usage: {customer.customer_id} ({customer.company})")
                 
+                # Auto-create Jira ticket for churn risk
+                jira_ticket = customer.active_ticket_key
+                should_create_ticket = True
+                
+                # Check if we recently created a ticket (deduplication)
+                if jira_ticket and customer.last_ticket_at:
+                    if customer.last_ticket_at > datetime.now() - timedelta(hours=24):
+                        should_create_ticket = False
+                        logger.info(f"♻️ Reusing existing retention ticket {jira_ticket} for {customer.company}")
+
+                if should_create_ticket:
+                    try:
+                        new_ticket = await self._create_jira_ticket(
+                            customer=customer,
+                            issue_type="Task",
+                            summary=f"⚠️ Churn Risk: {customer.company} - Declining Usage",
+                            description=f"**Customer**: {customer.company} ({customer.customer_id})\\n\\n**Tier**: {customer.subscription_tier.value.upper()}\\n\\n**Issue**: Usage trend declining - potential churn risk\\n\\n**Analysis**: Customer may be evaluating alternatives or experiencing product-market fit issues. Requires immediate retention outreach.\\n\\n**Action Required**: Schedule call to understand pain points. Offer premium support, custom solutions, or tier adjustment if needed."
+                        )
+                        if new_ticket:
+                            jira_ticket = new_ticket
+                            logger.info(f"✅ Auto-created retention ticket: {jira_ticket}")
+                            # Update customer state with new ticket info
+                            await self.state_manager.update_customer(customer.customer_id, {
+                                "last_ticket_at": datetime.now(),
+                                "active_ticket_key": jira_ticket
+                            })
+                    except Exception as e:
+                        logger.error(f"Failed to create Jira ticket: {e}")
+                
                 return {
                     "type": "retention_outreach",
                     "customer_id": customer.customer_id,
                     "customer_name": customer.company,
                     "reason": "Usage declining",
-                    "recommended_action": "Schedule retention call",
                     "priority": "high",
                     "created_at": now.isoformat(),
+                    "diagnosis": f"Usage trend declining for {customer.subscription_tier.value.upper()} tier customer. Potential churn risk. Customer may be evaluating alternatives or experiencing product-market fit issues.",
+                    "actions_taken": f"✅ Created retention ticket {jira_ticket}. Flagged account manager for immediate outreach." if jira_ticket else "⚠️ Flagged for retention team review. Escalation recommended.",
+                    "next_steps": f"Account manager to review ticket {jira_ticket} and schedule call within 24 hours. Understand pain points, offer premium support, custom solutions, or tier adjustment if needed." if jira_ticket else "Create retention ticket and schedule call with customer. Understand pain points and prevent churn.",
+                    "jira_ticket": jira_ticket,
                     "message": (
                         f"Hi {customer.company}, I noticed your API usage has been declining. "
                         f"Is everything working as expected? I'd love to understand if there's "
@@ -244,7 +292,7 @@ class ProactiveMonitor:
         description: str
     ) -> Optional[str]:
         """
-        Create a Jira ticket by calling the agent system.
+        Create a Jira ticket using the project's Jira tool.
         
         Args:
             customer: Customer profile
@@ -256,38 +304,33 @@ class ProactiveMonitor:
             Jira ticket key (e.g., 'KAN-123') or None if creation fails
         """
         try:
-            # Import here to avoid circular dependency
-            from aegis.agents.run_jira_agent import run_jira_agent
+            # Import the project's Jira tool
+            from aegis.tools.jira_mcp import create_ticket
             
-            # Create a feedback query that will route to FeedbackAgent
-            feedback_query = f"""
-I need to escalate this issue and create a Jira ticket:
-
-**Summary**: {summary}
-**Description**: {description}
-**Issue Type**: {issue_type}
-
-Please create a Jira ticket for this proactive intervention.
-"""
+            logger.info(f"🎫 Creating Jira ticket for {customer.company}: {summary}")
             
-            # Call orchestrator which will route to FeedbackAgent
-            logger.info(f"🎫 Creating Jira ticket via agent for {customer.company}...")
-            response = run_jira_agent(
-                issue_key=None,
-                query=feedback_query,
-                dry_run=False,
-                user_id="proactive_monitor",
-                session_id=f"monitor_{datetime.now().timestamp()}",
-                customer_id=customer.customer_id
+            # Call the Jira create ticket tool
+            # Note: project_key is hardcoded to KAN for demo purposes, 
+            # but in production should be configurable or passed in.
+            result = await create_ticket(
+                project_key="KAN",
+                summary=summary,
+                issue_type=issue_type,
+                description=description
             )
             
-            # Extract ticket key from metadata
-            if response and hasattr(response, 'metadata') and 'ticket_key' in response.metadata:
-                ticket_key = response.metadata['ticket_key']
-                logger.info(f"✅ Created Jira ticket: {ticket_key}")
-                return ticket_key
+            # Extract ticket key
+            if isinstance(result, dict):
+                # Check for direct key or nested inside 'issue'
+                ticket_key = result.get("key")
+                if not ticket_key and "issue" in result:
+                    ticket_key = result["issue"].get("key")
+                
+                if ticket_key:
+                    logger.info(f"✅ Created Jira ticket: {ticket_key}")
+                    return ticket_key
             
-            logger.warning(f"Ticket creation response received but no ticket key found")
+            logger.warning(f"Jira ticket creation returned unexpected result: {result}")
             return None
             
         except Exception as e:

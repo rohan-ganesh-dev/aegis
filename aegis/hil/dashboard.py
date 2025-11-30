@@ -498,22 +498,17 @@ elif page == "Jira Chargebee Agent":
     
     # Auto-refresh logic
     
-    # Initialize last check time
-    if 'last_monitor_check' not in st.session_state:
-        st.session_state.last_monitor_check = time.time()
+    # Manual Simulation Control
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🛠️ Simulation Controls")
     
-    current_time = time.time()
-    time_since_last_check = current_time - st.session_state.last_monitor_check
-    
-    # Auto-trigger BOTH simulation and monitoring every 15 seconds
-    if time_since_last_check >= 15:
-
+    if st.sidebar.button("🎲 Simulate Traffic", help="Trigger random activity changes (errors, usage spikes)"):
         try:
             state_manager = get_state_manager()
             
-            # Step 1: Simulate dramatic activity changes
             async def simulate_changes():
                 customers = await state_manager.list_customers()
+                changes_made = []
                 
                 for customer in [c for c in customers if c.customer_id.startswith('demo_')]:
                     scenario = random.choice([
@@ -523,19 +518,35 @@ elif page == "Jira Chargebee Agent":
                         {'usage_trend': 'increasing', 'total_api_calls': random.randint(1000, 2000)},
                     ])
                     await state_manager.update_customer(customer.customer_id, scenario)
+                    changes_made.append(f"{customer.company}: {list(scenario.keys())[0]}")
+                return changes_made
             
-            asyncio.run(simulate_changes())
+            changes = asyncio.run(simulate_changes())
+            st.sidebar.success(f"Simulated {len(changes)} updates!")
+            logger.info(f"Manual simulation triggered: {changes}")
             
-            # Step 2: Run monitor to detect new interventions
+            # Force immediate monitor check
             monitor = get_monitor()
             asyncio.run(monitor._check_all_customers())
+            st.rerun()
             
-            # Reset timer and refresh
+        except Exception as e:
+            st.sidebar.error(f"Simulation failed: {e}")
+            logger.error(f"Simulation error: {e}")
+
+    # Auto-Monitoring (Lightweight)
+    if 'last_monitor_check' not in st.session_state:
+        st.session_state.last_monitor_check = time.time()
+    
+    # Check every 10 seconds (read-only monitoring)
+    if time.time() - st.session_state.last_monitor_check > 10:
+        try:
+            monitor = get_monitor()
+            asyncio.run(monitor._check_all_customers())
             st.session_state.last_monitor_check = time.time()
-            logger.info("✅ Auto-refresh: Simulated activity and checked for interventions")
             st.rerun()
         except Exception as e:
-            logger.error(f"Auto-refresh error: {e}")
+            logger.error(f"Auto-monitor error: {e}")
 
 
 
@@ -574,8 +585,19 @@ elif page == "Jira Chargebee Agent":
                         st.caption(intervention['next_steps'])
                         
                         # Show Jira ticket if created
-                        if intervention.get('jira_ticket'):
-                            st.success(f"🎫 Ticket: {intervention['jira_ticket']}")
+                        ticket_key = intervention.get('jira_ticket')
+                        if ticket_key:
+                            jira_url = os.getenv("JIRA_BASE_URL")
+                            if not jira_url:
+                                base = os.getenv("JIRA_URL", "").rstrip("/")
+                                if base:
+                                    jira_url = f"{base}/browse"
+                            
+                            if jira_url:
+                                link = f"{jira_url}/{ticket_key}"
+                                st.success(f"🎫 Ticket: [{ticket_key}]({link})")
+                            else:
+                                st.success(f"🎫 Ticket: {ticket_key}")
                     else:
                         # Legacy format
                         st.markdown(f"**Reason:** {intervention['reason']}")

@@ -69,6 +69,10 @@ class CustomerProfile:
     # Workflow metadata
     next_check: Optional[datetime] = None
     workflow_metadata: Dict[str, Any] = field(default_factory=dict)
+
+    # Ticket tracking
+    last_ticket_at: Optional[datetime] = None
+    active_ticket_key: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -77,7 +81,7 @@ class CustomerProfile:
         data['subscription_tier'] = self.subscription_tier.value
         data['onboarding_stage'] = self.onboarding_stage.value
         # Convert datetimes to ISO format
-        for key in ['created_at', 'last_api_call', 'last_login', 'next_check']:
+        for key in ['created_at', 'last_api_call', 'last_login', 'next_check', 'last_ticket_at']:
             if data[key]:
                 data[key] = data[key].isoformat()
         return data

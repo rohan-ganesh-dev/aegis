@@ -444,26 +444,91 @@ elif page == "Jira Chargebee Agent":
     except Exception as e:
         st.sidebar.warning(f"Could not load profile: {str(e)}")
     
-    # Agent Settings
-    st.sidebar.divider()
-    st.sidebar.header("⚙️ Agent Settings")
-    dry_run = st.sidebar.checkbox("Dry Run Mode", value=True, key="chat_dry_run", help="If checked, won't post to Jira")
     
     # Proactive Interventions Section
     st.sidebar.divider()
     st.sidebar.header("🔔 Proactive Interventions")
     
-    # Button to trigger monitor check
-    if st.sidebar.button("🔄 Run Monitor Check", help="Manually trigger proactive health monitoring"):
-        with st.spinner("Analyzing customer health..."):
+    # Imports needed for simulation
+    import time
+    import random
+    from aegis.state.state_manager import get_state_manager, OnboardingStage, SubscriptionTier
+    
+    # Manual check button
+    if st.sidebar.button("🔄 Check Now", help="Immediately check for new interventions"):
+        with st.spinner("Checking..."):
             try:
+                state_manager = get_state_manager()
+                
+                # Simulate changes
+                async def simulate_changes():
+                    customers = await state_manager.list_customers()
+                    for customer in [c for c in customers if c.customer_id.startswith('demo_')]:
+                        scenario = random.choice([
+                            {'error_rate': random.uniform(0.15, 0.30), 'total_api_calls': max(20, random.randint(10, 100))},
+                            {'onboarding_stage': OnboardingStage.API_KEYS_GENERATED.value, 'total_api_calls': 0},
+                            {'usage_trend': 'declining', 'subscription_tier': SubscriptionTier.PRO.value},
+                            {'usage_trend': 'increasing', 'total_api_calls': random.randint(1000, 2000)},
+                        ])
+                        await state_manager.update_customer(customer.customer_id, scenario)
+                
+                asyncio.run(simulate_changes())
+                
+                # Run monitor
                 monitor = get_monitor()
-                # Run the check synchronously
                 asyncio.run(monitor._check_all_customers())
-                st.sidebar.success("✅ Monitor check complete!")
-                st.rerun()  # Refresh to show new interventions
+                
+                st.sidebar.success("✅ Updated!")
+                st.rerun()
             except Exception as e:
-                st.sidebar.error(f"Error running monitor: {str(e)}")
+                st.sidebar.error(f"Error: {str(e)}")
+    
+    # Auto-refresh logic
+    
+    # Initialize last check time
+    if 'last_monitor_check' not in st.session_state:
+        st.session_state.last_monitor_check = time.time()
+    
+    current_time = time.time()
+    time_since_last_check = current_time - st.session_state.last_monitor_check
+    
+    # Auto-trigger BOTH simulation and monitoring every 15 seconds
+    if time_since_last_check >= 15:
+
+        try:
+            state_manager = get_state_manager()
+            
+            # Step 1: Simulate dramatic activity changes
+            async def simulate_changes():
+                customers = await state_manager.list_customers()
+                
+                for customer in [c for c in customers if c.customer_id.startswith('demo_')]:
+                    scenario = random.choice([
+                        {'error_rate': random.uniform(0.15, 0.30), 'total_api_calls': max(20, random.randint(10, 100))},
+                        {'onboarding_stage': OnboardingStage.API_KEYS_GENERATED.value, 'total_api_calls': 0},
+                        {'usage_trend': 'declining', 'subscription_tier': SubscriptionTier.PRO.value},
+                        {'usage_trend': 'increasing', 'total_api_calls': random.randint(1000, 2000)},
+                    ])
+                    await state_manager.update_customer(customer.customer_id, scenario)
+            
+            asyncio.run(simulate_changes())
+            
+            # Step 2: Run monitor to detect new interventions
+            monitor = get_monitor()
+            asyncio.run(monitor._check_all_customers())
+            
+            # Reset timer and refresh
+            st.session_state.last_monitor_check = time.time()
+            logger.info("✅ Auto-refresh: Simulated activity and checked for interventions")
+            st.rerun()
+        except Exception as e:
+            logger.error(f"Auto-refresh error: {e}")
+
+
+
+
+
+
     
     # Display interventions
     try:
@@ -471,15 +536,22 @@ elif page == "Jira Chargebee Agent":
         interventions = monitor.get_recent_interventions(limit=3)
         if interventions:
             for intervention in interventions:
-                with st.sidebar.expander(f"{intervention['type'].replace('_', ' ').title()}", expanded=False):
+                # Format timestamp
+                from datetime import datetime
+                created_at = datetime.fromisoformat(intervention['created_at'])
+                time_str = created_at.strftime("%H:%M:%S")
+                
+                with st.sidebar.expander(f"{intervention['type'].replace('_', ' ').title()} • {time_str}", expanded=False):
                     st.markdown(f"**Customer:** {intervention['customer_name']}")
                     st.markdown(f"**Reason:** {intervention['reason']}")
                     st.markdown(f"**Priority:** {intervention['priority'].upper()}")
                     st.caption(intervention['message'][:100] + "...")
         else:
-            st.sidebar.info("No recent interventions. Click 'Run Monitor Check' above.")
+            st.sidebar.info("No recent interventions yet. Updates every 15 seconds.")
     except Exception as e:
         st.sidebar.caption(f"Monitor error: {str(e)}")
+    
+
     
     # Initialize chat history
     if "messages" not in st.session_state:
@@ -628,6 +700,9 @@ elif page == "Jira Chargebee Agent":
         # Run agent logic
         with st.spinner("🧠 Agent analyzing context and deciding actions..."):
             try:
+                # Production mode (not dry run)
+                dry_run = False
+                
                 response = run_jira_agent(
                     issue_key=None, # Agent extracts this from query now
                     query=prompt, 

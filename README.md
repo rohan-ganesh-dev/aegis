@@ -75,8 +75,22 @@ Open http://localhost:8501 to access:
 - **Approvals Dashboard**: Review and approve high-value agent actions
 - **Feedback System**: Provide feedback on agent responses (automatically creates Jira tickets for issues)
 
+#### 2. Run Activity Simulator (Optional - for Proactive Interventions Demo)
 
-### 2. Using Docker
+The dashboard includes **automatic simulation** that triggers every 15 seconds. However, you can also run the external simulator for additional activity:
+
+```bash
+python3 simulate_activity.py
+```
+
+This will:
+- Simulate customer activity changes every 15 seconds (error spikes, usage trends, onboarding issues)
+- Trigger proactive health monitoring
+- Generate interventions visible in the dashboard sidebar under "🔔 Proactive Interventions"
+
+**Note**: The dashboard's built-in "🔄 Check Now" button provides the same functionality, so this is optional.
+
+
 
 ```bash
 # Build the image
@@ -101,38 +115,7 @@ I'm a new customer, help me get started with Chargebee
 
 ## 🏗️ Architecture
 
-```mermaid
-graph LR
-    %% Styles
-    classDef user fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000;
-    classDef core fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000;
-    classDef ext fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000;
-    
-    %% Nodes
-    User((User)):::user
-    
-    subgraph Antigravity ["🌌 Antigravity Layer"]
-        Orchestrator[Orchestrator]:::core
-        Agents[Specialist Agents<br/>(Onboarding, Query, Feedback)]:::core
-        State[(State & Context)]:::core
-    end
-    
-    subgraph World ["🌍 External World"]
-        APIs[External APIs<br/>(Jira, Chargebee)]:::ext
-        LLM[Gemini 2.0 Flash]:::ext
-    end
-
-    %% Connections
-    User <-->|Chat & Actions| Orchestrator
-    Orchestrator <-->|Routes| Agents
-    Agents <-->|Read/Write| State
-    
-    Agents <-->|Reasoning| LLM
-    Agents -->|Takes Action| APIs
-    
-    %% Layout tweaks
-    Orchestrator ~~~ State
-```
+![Aegis Architecture](docs/images/architecture.png)
 
 Aegis uses an orchestrator-specialist agent pattern with MCP (Model Context Protocol) integrations:
 
@@ -238,6 +221,8 @@ Next Steps:
 [personalized code snippet]
 ```
 
+![Customer Onboarding](docs/images/new_customer_onboarding.png)
+
 **Key Difference**: Agent doesn't tell them HOW - it DOES it for them.
 
 ---
@@ -273,6 +258,7 @@ Next Steps:
 - Copy the code below to integrate Chargebee with Python.
 [Code with their actual API key embedded]
 ```
+![Customer Context Awareness](docs/images/customer_context_awareness.png)
 
 **Key Difference**: Agent adapts based on customer state, doesn't repeat work already done.
 
@@ -319,11 +305,15 @@ Next Steps:
 - If you are still encountering issues, please contact support with the error details for further assistance.
 ```
 
+![Error Detection](docs/images/error_detection.png)
+
+
+
 **Key Difference**: Agent analyzes THEIR data, provides diagnosis, not generic troubleshooting.
 
 ---
 
-### 🔔 Scenario 4: Proactive Monitoring (The "Wow" Factor)
+### 🔔 Scenario 4: Proactive Monitoring
 
 **What You'll See**: Check sidebar "Proactive Interventions" section
 
@@ -342,6 +332,7 @@ Priority: MEDIUM
 Message: "I noticed you generated API keys 24h ago but haven't 
 made any API calls yet. Need help with integration?"
 ```
+![Proactive Flow](docs/images/proactive_flow.png)
 
 **Key Difference**: Agent takes initiative, doesn't wait for customer to ask for help.
 
@@ -368,22 +359,6 @@ Agent: "I've created your account! Here's your API key..."
 **The Innovation**: AI that analyzes context → makes decisions → takes action
 
 ## 🛠️ Development
-
-
-### Code Quality
-
-```bash
-# Format code
-black aegis/ tests/
-isort aegis/ tests/
-
-# Type checking
-mypy aegis/
-
-# Pre-commit hooks
-pre-commit install
-pre-commit run --all-files
-```
 
 ### Project Structure
 
@@ -444,6 +419,7 @@ This repository contains a working MVP. For production deployment, implement:
 - [ ] Integrate real vector database (Qdrant, Pinecone) for RAG
 - [ ] Set up persistent storage for customer contexts (PostgreSQL, Redis)
 - [ ] Configure Google ADK with Gemini API credentials
+- [ ]   Implement A2A for agent communication
 
 #### Agent Logic
 - [ ] Implement real intent classification using Gemini 2.5 Pro
@@ -465,26 +441,6 @@ This repository contains a working MVP. For production deployment, implement:
 - [ ] Implement rate limiting and abuse prevention
 - [ ] Set up RBAC for HIL approvals
 - [ ] Enable encryption for sensitive data
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test file
-pytest tests/test_imports.py -v
-
-# Run with coverage
-pytest --cov=aegis tests/
-```
-
-## 📖 Documentation
-
-- [Demo Script](docs/demo_script.md) - Complete demo walkthrough with 4 scenarios
-- [Message Schema Examples](docs/messages.md) - Example agent-to-agent messages
-- [HIL API Schema](docs/hil_api_schema.yaml) - OpenAPI spec for HIL endpoints
-
 
 
 ## 🎯 Next Steps for Production
@@ -516,6 +472,6 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Built with ❤️ using Google ADK, Gemini 2.0 Flash, and MCP**
+**Built with ❤️ using Google ADK, Gemini 2.x Models,Jira and Chargebee MCP**
 
 *From RAG to Real Action: AI that doesn't just answer - it executes.*

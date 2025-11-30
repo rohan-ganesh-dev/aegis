@@ -157,6 +157,35 @@ High-value actions require human approval via:
 - **Feedback System**: Users can provide thumbs up/down feedback, automatically creating Jira tickets for negative feedback
 - **FastAPI HIL API**: REST endpoints for programmatic approval workflows
 
+---
+
+## 🛤️ Development Journey & Design Decisions
+
+### Why Hub-and-Spoke (Orchestrator-Specialist) Architecture?
+
+We evaluated three architectural patterns for multi-agent systems:
+
+**❌ Peer-to-Peer (Rejected)**
+- Agents communicate directly with each other
+- ⚠️ **Problem**: Complexity grows exponentially (N² connections)
+- ⚠️ **Problem**: No central control, difficult to debug routing decisions
+- ⚠️ **Problem**: Each agent needs to know about all other agents
+
+**❌ Hierarchical Chain (Rejected)**
+- Agents arranged in a fixed hierarchy (Agent A → Agent B → Agent C)
+- ⚠️ **Problem**: Rigid, can't handle diverse query types
+- ⚠️ **Problem**: Single point of failure at each level
+- ⚠️ **Problem**: Poor scalability when adding new specialists
+
+**✅ Hub-and-Spoke / Orchestrator Pattern (Chosen)**
+- Central orchestrator routes to specialized agents
+- ✅ **Benefit**: Single source of truth for routing logic
+- ✅ **Benefit**: Easy to add new specialists (just update orchestrator)
+- ✅ **Benefit**: Clear separation of concerns (routing vs execution)
+- ✅ **Benefit**: Simplified debugging (all decisions visible in one place)
+
+**Key Design Decision**: The orchestrator doesn't execute tasks itself—it analyzes intent and delegates to specialists. This mirrors how successful organizations scale: managers route work to domain experts rather than doing everything themselves.
+
 
 ## ✨ Key Features (What Makes This Agentic)
 
@@ -268,7 +297,8 @@ Next Steps:
 
 ### 🚨 Scenario 3: Error Detection & Health Analysis
 
-**Customer Persona**: Select "At-Risk Customer" in dashboard sidebar
+**Customer Persona**: Select "At-Risk Customer"
+ in dashboard sidebar
 
 **What You'll See**:
 - Context Card shows: Health: 🚨 At-Risk, Error Rate: 15%, Usage: Declining

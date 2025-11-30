@@ -91,6 +91,22 @@ class OrchestratorAgent(AegisAgent):
         Returns:
             AgentResponse from the specialist
         """
+        # Initialize execution steps tracking
+        from datetime import datetime
+        execution_steps = [
+            {
+                "step_type": "query",
+                "name": "User Query",
+                "details": query[:100] + "..." if len(query) > 100 else query,
+                "timestamp": datetime.utcnow().isoformat()
+            },
+            {
+                "step_type": "orchestrator",
+                "name": "Orchestrator",
+                "details": "Analyzing intent and routing to specialist",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        ]
         # 1. Analyze intent using Gemini
         intent_prompt = f"""
         Analyze the following user query and determine the best agent to handle it.
@@ -147,11 +163,21 @@ class OrchestratorAgent(AegisAgent):
                         sender=self.name,
                         recipient=specialist.name,
                         type="task",
-                        payload={"query": query, **(context or {})}
+                        payload={
+                            "query": query, 
+                            "execution_steps": execution_steps,  # Pass execution tracking
+                            **(context or {})
+                        }
                     )
                     
                     # Call the specialist's handle_message method
                     response = await specialist.handle_message(message)
+                    
+                    # Specialist already has the full execution path (we passed execution_steps to them)
+                    # So we don't need to prepend - just use their steps as-is
+                    # If specialist didn't populate execution_steps, fall back to our orchestrator steps
+                    if not response.execution_steps:
+                        response.execution_steps = execution_steps
                     
                     # Add routing metadata
                     if response.metadata is None:

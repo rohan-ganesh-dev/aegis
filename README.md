@@ -1,102 +1,26 @@
-# Aegis - Truly Agentic Customer Success AI
+# Aegis - The Antigravity Layer for Customer Success
 
-🛡️ **Aegis** is a truly agentic customer success platform built on Google ADK (Agent Development Kit). Unlike traditional RAG-based chatbots that only retrieve information, Aegis **takes autonomous action** - creating subscriptions, generating API keys, provisioning environments, and proactively monitoring customer health.
+**Aegis** is a browser-based "Antigravity" layer where AI doesn't just answer questions—it **takes action**.
 
-> **From RAG to Real Action**: AI that doesn't just answer questions - it gets things done.
+It sits between your product and your customer, understanding their specific codebase, learning their usage patterns over time, and proactively solving problems before humans ever need to intervene.
 
-## 💡 The Problem
+> **Beyond Chatbots**: Traditional AI waits for questions. Aegis anticipates needs and executes solutions.
 
-Enterprise support teams are overwhelmed, and traditional AI chatbots don't help enough.
-- **Repetitive Manual Work**: Customers ask "How do I get started?" and support teams manually create accounts, generate API keys, send setup emails - 80% of support time is routine setup
-- **Reactive Support**: Teams wait for customers to report problems instead of detecting and preventing issues proactively
-- **No Context**: Every interaction starts from zero - no memory of customer history, tech stack, or current state
-- **Unit Economics Nightmare**: Scaling support linearly with customer growth kills margins
+## 🌌 The Vision: Antigravity
 
-## 🛠️ The Solution: Truly Agentic AI
+Support shouldn't be about answering tickets; it should be about removing friction (gravity) from the customer experience.
 
-**Aegis** provides every customer with a dedicated, intelligent AI that doesn't just answer questions - it **autonomously executes workflows**:
+- **Codebase Awareness**: Aegis doesn't just read docs; it understands *your customer's* specific implementation and tech stack.
+- **Action Over Answers**: Instead of telling a user "Here's how to generate an API key," Aegis generates it, provisions the environment, and writes the integration code for them.
+- **Proactive Evolution**: It learns usage patterns to detect when a customer is stuck or ready to scale, intervening *before* they ask for help.
 
-### 🎯 Agentic Behavior
-1. **Context-Aware**: Understands customer state (subscription, onboarding stage, API usage, error patterns) before responding
-2. **Autonomous Actions**: Creates trial subscriptions, generates API keys, provisions test environments, sends personalized emails
-3. **Decision-Making**: Analyzes customer state and decides what actions to take, not just what to say
-4. **Proactive Monitoring**: Background intelligence detects issues (onboarding stuck, high errors, usage declining) and intervenes before customers ask
-5. **Multi-Step Workflows**: Orchestrates complex end-to-end processes (create account → generate keys → send email → monitor progress)
+## 🚀 What It Does
 
-### 🤖 Specialized Agents
-1. **Orchestrator Agent**: Routes queries to specialist agents based on intent
-2. **Onboarding Agent** (Agentic): Autonomously executes customer setup workflows
-3. **Query Resolution Agent**: Resolves Jira tickets and documentation queries
-4. **Feedback Agent**: Processes user feedback and creates improvement tickets
+Aegis acts as an intelligent, autonomous layer that:
 
-## 🏗️ Architecture
-
-![Aegis Dashboard Demo](docs/images/architecture.png)
-
-## 🏗️ Flow Diagram
-
-![Flow Diagram](docs/images/flow.png)
-
-Aegis uses an orchestrator-specialist agent pattern with MCP (Model Context Protocol) integrations:
-
-### Core Components
-
-**Agentic Intelligence**:
-- **State Manager**: Tracks customer profiles, onboarding stages, subscription tiers, API activity, health metrics
-- **Customer Context Tools**: Analyzes customer health (error rates, usage trends, engagement)
-- **Autonomous Action Tools**: Creates subscriptions, generates API keys, sends emails, provisions environments
-- **Proactive Monitor**: Background task detecting customer issues and triggering interventions
-
-**Specialized Agents**:
-- **Orchestrator Agent**: Routes queries to appropriate specialist agents
-- **Onboarding Agent** (AGENTIC): Autonomously executes multi-step onboarding workflows
-- **Query Resolution Agent**: Handles Jira tickets and documentation queries  
-- **Feedback Agent**: Processes user feedback and creates Jira tickets
-
-### External Integrations
-
-Agents leverage MCP servers for external integrations:
-- **Jira MCP Server**: Docker-based MCP server for Jira operations (create tickets, add comments, fetch ticket details)
-- **Chargebee MCP Server**: HTTP-based MCP server for Chargebee documentation and code examples
-
-### Agent Communication
-
-Agents communicate via a message transport layer (in-memory for development, Redis adapter for production). The orchestrator:
-- Analyzes user intent and context
-- Routes queries to the appropriate specialist agent
-- Maintains conversation history and context
-- Returns structured responses with metadata
-
-### Human-in-Loop (HIL)
-
-High-value actions require human approval via:
-- **Streamlit Dashboard**: Interactive chat interface with feedback system and approval workflows
-- **Feedback System**: Users can provide thumbs up/down feedback, automatically creating Jira tickets for negative feedback
-- **FastAPI HIL API**: REST endpoints for programmatic approval workflows
-
-## ✨ Key Features (What Makes This Agentic)
-
-### 🧠 Intelligence
-1. **Customer Context Awareness**: Knows subscription tier, onboarding stage, API usage, error patterns before responding
-2. **Health Monitoring**: Analyzes engagement scores, error rates, usage trends, risk factors
-3. **Decision Logic**: Decides WHAT to do based on customer state, not just what to say
-
-### ⚙️ Autonomous Actions
-4. **Subscription Management**: Creates trial accounts, upgrades plans, applies discounts
-5. **API Key Generation**: Generates test/production keys autonomously
-6. **Environment Provisioning**: Sets up sandbox environments for testing
-7. **Personalized Communication**: Sends setup emails with actual customer data
-
-### 🚀 Proactive Behavior  
-8. **Background Monitoring**: Detects onboarding stuck, high errors, usage spikes without user asking
-9. **Preventive Intervention**: Offers debugging help, retention outreach, upsell suggestions proactively
-10. **Multi-Step Orchestration**: Executes complex end-to-end workflows (create → provision → notify → monitor)
-
-### 🔧 Traditional Features
-11. **RAG Documentation Search**: Vector-based search for Chargebee docs (when retrieval is needed)
-12. **Jira Integration**: Creates tickets, tracks issues, manages customer feedback
-13. **Human-in-Loop**: Approval workflows for high-risk actions
-14. **Stateful Conversations**: Memory across interactions using Google ADK Sessions
+1.  **Understands Context**: "This customer is on the Pro plan, using Python SDK v2, and getting 401 errors."
+2.  **Takes Action**: Autonomously creates subscriptions, generates keys, provisions sandboxes, and sends personalized emails.
+3.  **Proactively Solves**: Detects integration issues in real-time and reaches out with the exact fix.
 
 ## 🚀 Quick Start
 
@@ -147,18 +71,12 @@ streamlit run aegis/hil/dashboard.py
 
 Open http://localhost:8501 to access:
 - **Jira Chargebee Agent**: Interactive chat interface for querying Chargebee docs and Jira tickets
+- **Execution Flow Visualization**: Collapsible flowchart showing how queries flow from user → orchestrator → specialist agent → tools
 - **Approvals Dashboard**: Review and approve high-value agent actions
 - **Feedback System**: Provide feedback on agent responses (automatically creates Jira tickets for issues)
 
-#### 2. Run HIL API (Optional)
 
-```bash
-python aegis/hil/api.py
-```
-
-API will be available at http://localhost:8001. View docs at http://localhost:8001/docs.
-
-### Using Docker
+### 2. Using Docker
 
 ```bash
 # Build the image
@@ -168,23 +86,118 @@ docker build -t aegis:latest .
 docker-compose up
 ```
 
-Services:
-- Supervisor: Runs agent demo
-- HIL Dashboard: http://localhost:8501
-- HIL API: http://localhost:8001
 
-## 🧪 Testing
+### 🆕 Simple Test Scenario 1: New Customer Onboarding (Autonomous Actions)
 
-```bash
-# Run all tests
-pytest tests/ -v
+**Customer Persona**: Select "New Customer" in dashboard sidebar
 
-# Run specific test file
-pytest tests/test_imports.py -v
+**What You'll See**:
+- Context Card shows: Tier: NONE, Stage: NEW, API Calls: 0
 
-# Run with coverage
-pytest --cov=aegis tests/
+**Prompt**: 
 ```
+I'm a new customer, help me get started with Chargebee
+```
+
+## 🏗️ Architecture
+
+```mermaid
+graph LR
+    %% Styles
+    classDef user fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#000;
+    classDef core fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000;
+    classDef ext fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000;
+    
+    %% Nodes
+    User((User)):::user
+    
+    subgraph Antigravity ["🌌 Antigravity Layer"]
+        Orchestrator[Orchestrator]:::core
+        Agents[Specialist Agents<br/>(Onboarding, Query, Feedback)]:::core
+        State[(State & Context)]:::core
+    end
+    
+    subgraph World ["🌍 External World"]
+        APIs[External APIs<br/>(Jira, Chargebee)]:::ext
+        LLM[Gemini 2.0 Flash]:::ext
+    end
+
+    %% Connections
+    User <-->|Chat & Actions| Orchestrator
+    Orchestrator <-->|Routes| Agents
+    Agents <-->|Read/Write| State
+    
+    Agents <-->|Reasoning| LLM
+    Agents -->|Takes Action| APIs
+    
+    %% Layout tweaks
+    Orchestrator ~~~ State
+```
+
+Aegis uses an orchestrator-specialist agent pattern with MCP (Model Context Protocol) integrations:
+
+### Core Components
+
+**Agentic Intelligence**:
+- **State Manager**: Tracks customer profiles, onboarding stages, subscription tiers, API activity, health metrics
+- **Customer Context Tools**: Analyzes customer health (error rates, usage trends, engagement)
+- **Autonomous Action Tools**: Creates subscriptions, generates API keys, sends emails, provisions environments
+- **Proactive Monitor**: Background task detecting customer issues and triggering interventions
+
+**Specialized Agents**:
+- **Orchestrator Agent**: Routes queries to appropriate specialist agents
+- **Onboarding Agent** (AGENTIC): Autonomously executes multi-step onboarding workflows
+- **Query Resolution Agent**: Handles Jira tickets and documentation queries  
+- **Feedback Agent**: Processes user feedback and creates Jira tickets
+
+### External Integrations
+
+Agents leverage MCP servers for external integrations:
+- **Jira MCP Server**: Docker-based MCP server for Jira operations (create tickets, add comments, fetch ticket details)
+- **Chargebee MCP Server**: HTTP-based MCP server for Chargebee documentation and code examples
+
+### Agent Communication
+
+Agents communicate via a message transport layer (in-memory for development, Redis adapter for production). The orchestrator:
+- Analyzes user intent and context
+- Routes queries to the appropriate specialist agent
+- Maintains conversation history and context
+- Returns structured responses with metadata
+
+### Human-in-Loop (HIL)
+
+High-value actions require human approval via:
+- **Streamlit Dashboard**: Interactive chat interface with feedback system and approval workflows
+- **Execution Flow Visualization**: Visual flowchart showing the complete execution path (Query → Orchestrator → Agent → Tools) for each response
+- **Feedback System**: Users can provide thumbs up/down feedback, automatically creating Jira tickets for negative feedback
+- **FastAPI HIL API**: REST endpoints for programmatic approval workflows
+
+
+## ✨ Key Features (What Makes This Agentic)
+
+### 🧠 Intelligence
+1. **Customer Context Awareness**: Knows subscription tier, onboarding stage, API usage, error patterns before responding
+2. **Health Monitoring**: Analyzes engagement scores, error rates, usage trends, risk factors
+3. **Decision Logic**: Decides WHAT to do based on customer state, not just what to say
+
+### ⚙️ Autonomous Actions
+4. **Subscription Management**: Creates trial accounts, upgrades plans, applies discounts
+5. **API Key Generation**: Generates test/production keys autonomously
+6. **Environment Provisioning**: Sets up sandbox environments for testing
+7. **Personalized Communication**: Sends setup emails with actual customer data
+
+### 🚀 Proactive Behavior  
+8. **Background Monitoring**: Detects onboarding stuck, high errors, usage spikes without user asking
+9. **Preventive Intervention**: Offers debugging help, retention outreach, upsell suggestions proactively
+10. **Multi-Step Orchestration**: Executes complex end-to-end workflows (create → provision → notify → monitor)
+
+### 🔧 Traditional Features
+11. **RAG Documentation Search**: Vector-based search for Chargebee docs (when retrieval is needed)
+12. **Jira Integration**: Creates tickets, tracks issues, manages customer feedback
+13. **Human-in-Loop**: Approval workflows for high-risk actions
+14. **Stateful Conversations**: Memory across interactions using Google ADK Sessions
+15. **Execution Flow Visualization**: Visual flowchart showing agent routing and tool execution paths
+
 
 ## 🎭 Demo Scenarios - See Agentic AI in Action
 
@@ -212,12 +225,16 @@ I'm a new customer, help me get started with Chargebee
 
 **Expected Response**:
 ```
-Welcome! I've set up your trial account:
+Diagnostic Results:
+- Customer Status: NEW - No active subscription found.
+- Requirement: Needs trial account and API keys.
 
-✅ Trial subscription created (expires in 14 days)
-✅ Generated test API key: sk_test_[actual_key]
+Actions Taken:
+- Executed create_trial_subscription() → Created trial (expires in 14 days).
+- Executed generate_api_keys(env='test') → Generated key sk_test_[actual_key].
 
-Here's a Python code example using YOUR API key:
+Next Steps:
+- Use the code below to make your first API call.
 [personalized code snippet]
 ```
 
@@ -244,8 +261,16 @@ How do I integrate with Python?
 
 **Expected Response**:
 ```
-Since you already have your test API key (sk_test_xxx), here's Python code ready to use:
+Diagnostic Results:
+- Customer Status: TRIAL - Active subscription found.
+- API Key Status: FOUND - Existing key sk_test_xxx available.
 
+Actions Taken:
+- Executed query_chargebee_code() → Retrieved Python integration examples.
+- Contextualized Code → Injected actual API key sk_test_xxx into example.
+
+Next Steps:
+- Copy the code below to integrate Chargebee with Python.
 [Code with their actual API key embedded]
 ```
 
@@ -273,13 +298,25 @@ My API calls keep failing with 401 errors
 
 **Expected Response**:
 ```
-I analyzed your error patterns - you have a 15% error rate.
-Most common issue: 401 Unauthorized errors.
+Diagnostic Results:
 
-Root cause: [Specific diagnosis]
-Solution: [Specific fix]
+- Root Cause: KEY_VALID_BUT_HEADERS_INCORRECT - API key appears valid but request headers are likely incorrect.
+- API Key Status: SUCCESS - Key sk_test_demo123... is valid and active
+- Authentication Test: SUCCESS - Authentication working correctly; response_code: 200, response_time_ms: 247
 
-Would you like me to [specific action]?
+Actions Taken:
+
+- Executed diagnose_401_error() → Root cause identified: KEY_VALID_BUT_HEADERS_INCORRECT
+- Executed verify_api_key() → Confirmed key sk_test_demo123... is VALID
+- Executed test_api_authentication() → Test call returned 200 OK (247ms)
+- Executed apply_fix_for_401() → Prepared authentication example:
+[Code block with fix]
+
+Next Steps:
+
+- Please replace "sk_test_YOUR_KEY" in the code example above with your actual API key: "sk_test_demo123...".
+- Test the authentication using the updated code example and verify you get a 200 OK response.
+- If you are still encountering issues, please contact support with the error details for further assistance.
 ```
 
 **Key Difference**: Agent analyzes THEIR data, provides diagnosis, not generic troubleshooting.
@@ -395,6 +432,8 @@ docs/                    # Documentation
 - ✅ Feedback system with automatic Jira ticket creation
 - ✅ Human-in-loop approval dashboard
 - ✅ Centralized configuration management
+- ✅ **Execution flow visualization**: Visual flowchart showing Query → Orchestrator → Agent → Tools path
+
 
 ### 🚧 Production Implementation TODO
 
@@ -427,79 +466,26 @@ This repository contains a working MVP. For production deployment, implement:
 - [ ] Set up RBAC for HIL approvals
 - [ ] Enable encryption for sensitive data
 
+## 🧪 Testing
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_imports.py -v
+
+# Run with coverage
+pytest --cov=aegis tests/
+```
+
 ## 📖 Documentation
 
 - [Demo Script](docs/demo_script.md) - Complete demo walkthrough with 4 scenarios
 - [Message Schema Examples](docs/messages.md) - Example agent-to-agent messages
 - [HIL API Schema](docs/hil_api_schema.yaml) - OpenAPI spec for HIL endpoints
 
-## 🚀 What Makes Aegis "Truly Agentic"
 
-### The Transformation: RAG → Agentic AI
-
-**Traditional RAG-Based Systems**:
-```
-User: "I'm a new customer"
-System: [Searches docs] "Here's a link to our getting started guide..."
-Result: User still has to do all the work manually
-```
-
-**Agentic Systems (Aegis)**:
-```
-User: "I'm a new customer"
-Agent: 
-  1. Analyzes customer state → No subscription found
-  2. Decides actions → Create trial + Generate keys
-  3. Executes autonomously → Creates subscription, generates sk_test_xxx
-  4. Responds with results → "I've set up your account! Here's your API key..."
-Result: Work is DONE, customer can start immediately
-```
-
-### 5 Pillars of Agentic Behavior
-
-#### 1. **Context-Aware Intelligence**
-- Maintains customer state (subscription, stage, health)
-- Analyzes before responding (not just pattern matching)
-- Personalizes based on customer history
-
-#### 2. **Autonomous Action Execution**
-- Creates accounts, generates keys, provisions environments
-- Multi-step workflow orchestration
-- Updates state as work progresses
-
-#### 3. **Decision-Making Logic**
-- Evaluates customer state → Decides what to do
-- Different actions for different states
-- Balances autonomy with human oversight
-
-#### 4. **Proactive Intelligence**
-- Background monitoring of customer health
-- Detects issues before customers report them
-- Intervenes without being asked
-
-#### 5. **Learning & Adaptation**
-- Tracks success rates of interventions
-- Refines decision logic over time
-- Improves with more customer data
-
-### Real-World Impact
-
-**Unit Economics**:
-- Traditional: $150/customer (human CSM)
-- Aegis: $5/customer (autonomous AI)
-- **30x cost reduction**
-
-**Customer Experience**:
-- Time to first API call: **70% faster**
-- Onboarding completion: **85% → 95%**
-- Churn reduction: **40% through proactive intervention**
-
-**Scalability**:
-- Support 10,000 customers with same team size
-- Consistent experience regardless of customer tier
-- Enterprise-grade service at fraction of cost
-
----
 
 ## 🎯 Next Steps for Production
 

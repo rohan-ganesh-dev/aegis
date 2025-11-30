@@ -206,8 +206,21 @@ class OnboardingAgent(AegisAgent):
         
     async def handle_message(self, message: AgentMessage) -> Optional[AgentResponse]:
         """Handle incoming messages with agentic workflow execution."""
+        from datetime import datetime
+        
         query = message.payload.get("query", "")
         customer_id = message.payload.get("customer_id", "demo_new_customer")  # Default for demo
+        
+        # Get execution steps from orchestrator (or initialize if not present)
+        execution_steps = message.payload.get("execution_steps", [])
+        
+        # Add agent step to execution flow
+        execution_steps.append({
+            "step_type": "agent",
+            "name": self.name,
+            "details": "Processing query with diagnostic and action tools",
+            "timestamp": datetime.utcnow().isoformat()
+        })
         
         logger.info(f"[AGENTIC] OnboardingAgent processing: '{query}' for customer: {customer_id}")
         
@@ -220,7 +233,7 @@ class OnboardingAgent(AegisAgent):
             if is_error_query:
                 logger.info(f"[DIAGNOSTIC] Detected error query, running diagnostics for {customer_id}")
                 
-                # Manually execute all diagnostic tools
+                # Manually execute all diagnostic tools and track them
                 from aegis.tools.diagnostic_actions import (
                     diagnose_401_error,
                     verify_api_key,
@@ -228,10 +241,37 @@ class OnboardingAgent(AegisAgent):
                     apply_fix_for_401
                 )
                 
-                # Run all diagnostics (now async)
+                # Track each tool execution
+                execution_steps.append({
+                    "step_type": "tool",
+                    "name": "diagnose_401_error",
+                    "details": f"Diagnosing 401 errors for {customer_id}",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
                 diagnosis = await diagnose_401_error(customer_id)
+                
+                execution_steps.append({
+                    "step_type": "tool",
+                    "name": "verify_api_key",
+                    "details": f"Verifying API key for {customer_id}",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
                 verification = await verify_api_key(customer_id)
+                
+                execution_steps.append({
+                    "step_type": "tool",
+                    "name": "test_api_authentication",
+                    "details": f"Testing API authentication for {customer_id}",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
                 auth_test = await test_api_authentication(customer_id)
+                
+                execution_steps.append({
+                    "step_type": "tool",
+                    "name": "apply_fix_for_401",
+                    "details": f"Applying fix for 401 errors for {customer_id}",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
                 fix_result = await apply_fix_for_401(customer_id)
                 
                 diagnostic_results = {
@@ -300,6 +340,7 @@ Be specific and reference the actual values from the diagnostic results above!
             
             return AgentResponse(
                 text=response_text,
+                execution_steps=execution_steps,  # Include execution flow
                 metadata={
                     "agent": self.name,
                     "customer_id": customer_id,
@@ -312,6 +353,7 @@ Be specific and reference the actual values from the diagnostic results above!
             logger.error(f"Error in OnboardingAgent: {e}", exc_info=True)
             return AgentResponse(
                 text=f"I encountered an error while trying to help: {str(e)}",
+                execution_steps=execution_steps,
                 metadata={"error": True}
             )
     

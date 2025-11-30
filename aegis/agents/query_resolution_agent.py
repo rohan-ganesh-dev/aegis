@@ -98,12 +98,30 @@ class QueryResolutionAgent(AegisAgent):
         
     async def handle_message(self, message: AgentMessage) -> Optional[AgentResponse]:
         """Handle incoming messages."""
+        from datetime import datetime
+        
         query = message.payload.get("query", "")
+        
+        # Get execution steps from orchestrator (or initialize if not present)
+        execution_steps = message.payload.get("execution_steps", [])
+        
+        # Add agent step to execution flow
+        execution_steps.append({
+            "step_type": "agent",
+            "name": self.name,
+            "details": "Searching documentation and knowledge base",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
         try:
+            # Note: Tool calls within generate() are handled by the base class
+            # For now, we'll just track the agent step
+            # Future enhancement: intercept tool calls in base.py to track them
             response_text = await self.generate(query)
             
             return AgentResponse(
                 text=response_text,
+                execution_steps=execution_steps,
                 metadata={"agent": self.name}
             )
             
@@ -111,5 +129,6 @@ class QueryResolutionAgent(AegisAgent):
             logger.error(f"Error in QueryResolutionAgent: {e}", exc_info=True)
             return AgentResponse(
                 text=f"I encountered an error: {str(e)}",
+                execution_steps=execution_steps,
                 metadata={"error": True}
             )

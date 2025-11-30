@@ -71,12 +71,14 @@ class AgentResponse:
         actions: List of actions to be executed
         attachments: Additional data attachments
         metadata: Extra metadata for tracking/debugging
+        execution_steps: Execution flow tracking for UI visualization
     """
 
     text: str
     actions: List[Dict[str, Any]] = field(default_factory=list)
     attachments: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    execution_steps: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert response to dictionary."""

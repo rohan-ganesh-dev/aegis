@@ -11,7 +11,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
@@ -34,6 +34,83 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 ISSUE_KEY_PATTERN = re.compile(r"\b[A-Z]+-\d+\b")
+
+
+def render_execution_flow(execution_steps: List[Dict[str, Any]]) -> None:
+    """
+    Render collapsible execution flow visualization as a flowchart.
+    
+    Displays the path: User Query → Orchestrator → Agent → Tools
+    """
+    if not execution_steps:
+        return
+    
+    # Make it more visible with a divider first
+    st.divider()
+    with st.expander("🔍 **View Execution Flow** (Query → Orchestrator → Agent → Tools)", expanded=True):
+        # Build flowchart using HTML/CSS boxes and arrows
+        html = '<div style="font-family: Arial, sans-serif; padding: 10px;">'
+        
+        for idx, step in enumerate(execution_steps):
+            step_type = step.get("step_type", "unknown")
+            name = step.get("name", "Unknown")
+            details = step.get("details", "")
+            
+            # Choose styles based on step type
+            if step_type == "query":
+                bg_color = "#9C27B0"
+                icon = "💬"
+                margin_left = "0px"
+            elif step_type == "orchestrator":
+                bg_color = "#2196F3"
+                icon = "🎯"
+                margin_left = "40px"
+            elif step_type == "agent":
+                bg_color = "#4CAF50"
+                icon = "🤖"
+                margin_left = "80px"
+            elif step_type == "tool":
+                bg_color = "#FF9800"
+                icon = "🔧"
+                margin_left = "120px"
+            else:
+                bg_color = "#888"
+                icon = "❓"
+                margin_left = "160px"
+            
+            # Add arrow if not first item
+            if idx > 0:
+                html += f'<div style="margin-left: {margin_left}; width: 2px; height: 20px; background: #666; margin-bottom: 5px;"></div>'
+                html += f'<div style="margin-left: {margin_left}; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 10px solid #666; margin-bottom: 10px;"></div>'
+            
+            # Add box
+            html += f'''
+            <div style="
+                margin-left: {margin_left};
+                margin-bottom: 15px;
+                padding: 15px;
+                background: {bg_color}22;
+                border-left: 4px solid {bg_color};
+                border-radius: 8px;
+                max-width: 600px;
+            ">
+                <div style="color: {bg_color}; font-weight: bold; font-size: 16px; margin-bottom: 5px;">
+                    {icon} {name}
+                </div>
+                <div style="color: #aaa; font-size: 13px;">
+                    {details}
+                </div>
+            </div>
+            '''
+        
+        html += '</div>'
+        
+        # Display HTML
+        st.markdown(html, unsafe_allow_html=True)
+
+
+
+
 
 
 def _extract_issue_key(issue_key: Optional[str], query: str) -> str:
@@ -433,6 +510,10 @@ elif page == "Jira Chargebee Agent":
             
             st.markdown(message["content"])
             
+            # Display execution flow if available in message history
+            if message["role"] == "assistant" and "execution_steps" in message:
+                render_execution_flow(message["execution_steps"])
+            
             # Add feedback buttons for assistant messages (except the welcome message)
             if message["role"] == "assistant" and idx > 0:
                 feedback_key = f"feedback_{idx}"
@@ -576,6 +657,13 @@ elif page == "Jira Chargebee Agent":
                     
                     st.markdown(agent_response_text)
                     
+                    # Display execution flow if available
+                    if response.execution_steps:
+                        logger.info(f"Rendering execution flow with {len(response.execution_steps)} steps")
+                        render_execution_flow(response.execution_steps)
+                    else:
+                        logger.warning("No execution_steps in response")
+                    
                     # Show attachments if any
                     if response.attachments:
                         for att in response.attachments:
@@ -605,7 +693,8 @@ elif page == "Jira Chargebee Agent":
                     "content": agent_response_text,
                     "docs_answer": docs_answer_text,  # Store for feedback
                     "issue_key": issue_key,  # Store to determine feedback action
-                    "agent_name": agent_name  # Store agent name for display
+                    "agent_name": agent_name,  # Store agent name for display
+                    "execution_steps": response.execution_steps  # Store execution flow for display
                 })
                 
                 # Force rerun to display feedback buttons immediately

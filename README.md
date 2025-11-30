@@ -315,7 +315,7 @@ Next Steps:
 
 ---
 
-### 🔔 Scenario 4: Proactive Monitoring
+### 🔔 Scenario 4: Proactive Monitoring and Agentic Interventions
 
 **What You'll See**: Check sidebar "Proactive Interventions" section
 

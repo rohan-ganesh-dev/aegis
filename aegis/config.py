@@ -46,6 +46,25 @@ class AegisConfig:
     zendesk_api_key: str = os.getenv("ZENDESK_API_KEY", "PLACEHOLDER_ZENDESK_KEY")
     support_api_key: str = os.getenv("SUPPORT_API_KEY", "PLACEHOLDER_SUPPORT_KEY")
 
+    # Jira Configuration (for MCP integration)
+    jira_url: str = os.getenv("JIRA_URL", "")
+    jira_username: str = os.getenv("JIRA_USERNAME", "")
+    jira_api_token: str = os.getenv("JIRA_API_TOKEN", "")
+    jira_project_key: str = os.getenv("JIRA_PROJECT_KEY", "")
+    jira_base_url: str = os.getenv("JIRA_BASE_URL", "")  # e.g., https://yourorg.atlassian.net/browse
+    
+    # Jira MCP Server Configuration
+    jira_mcp_command: str = os.getenv("JIRA_MCP_COMMAND", "docker")
+    jira_mcp_image: str = os.getenv("JIRA_MCP_IMAGE", "")
+
+    # Chargebee MCP Configuration
+    chargebee_mcp_url: str = os.getenv("CHARGEBEE_MCP_URL", "")
+
+    # Google ADK Configuration
+    google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
+    adk_agent_card_port: int = int(os.getenv("ADK_AGENT_CARD_PORT", "8080"))
+    adk_session_store: str = os.getenv("ADK_SESSION_STORE", "in_memory")
+
     def __post_init__(self):
         """Set up logging after initialization."""
         self._setup_logging()
